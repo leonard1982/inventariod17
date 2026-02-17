@@ -12,13 +12,11 @@ function cargarReporte(url, mensaje, confirmacion = false) {
         }).then((result) => {
             if (result.isConfirmed) {
                 mostrarCargando();
-                realizarPeticion(url);
-                cerrarMenu();
+                window.location.href = url;
             }
         });
     } else {
-        //mostrarCargando();
-        realizarPeticion(url);
+        window.location.href = url;
     }
 }
 
@@ -113,5 +111,5 @@ $("#Volver").click(function (e) {
     // Habilitar el botón NuevoRegistro
     $("#NuevoRegistro").prop('disabled', false);
 
-    cargarReporte("ListaConfiguracionLineas.php", 'Cargando');
+    window.location.href = "ListaConfiguracionLineas.php";
 });

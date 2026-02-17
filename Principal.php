@@ -2,48 +2,72 @@
 <?php
 session_start();
 
-// Función para verificar si el usuario ha iniciado sesión
 function verificarSesion() {
     if (empty($_SESSION["user"])) {
-        // Redirigir al usuario a la página de inicio de sesión si no ha iniciado sesión
         header("Location: index.php");
         exit();
     }
 }
 
-// Verificar la sesión del usuario
 verificarSesion();
 
+require_once "conecta.php";
+
+$usuarioSesion = $_SESSION["user"];
+$estadoPermisosMenu = obtenerEstadoPermisosMenuUsuario($usuarioSesion);
+$esAdminMenu = !empty($estadoPermisosMenu['es_admin']);
+$idsPermitidos = isset($estadoPermisosMenu['permitidos']) ? array_values($estadoPermisosMenu['permitidos']) : array();
+$menusUsuarioPermitidos = obtenerMenusPermitidosUsuario($usuarioSesion, 'usuario');
+
+$menusPrincipalesDef = array(
+    array('id' => 'listasmovsexis', 'icono' => 'fa-tachometer-alt', 'texto' => 'Lista sin Mov y sin Exis'),
+    array('id' => 'listasmovcexis', 'icono' => 'fa-table', 'texto' => 'Lista sin Mov y con Exis'),
+    array('id' => 'listaclasificac', 'icono' => 'fa-chart-pie', 'texto' => 'ABC Costo Inventario'),
+    array('id' => 'log', 'icono' => 'fa-history', 'texto' => 'Log Maximos y Minimos'),
+    array('id' => 'backorder', 'icono' => 'fa-table', 'texto' => 'BackOrder'),
+    array('id' => 'guiasdespachos', 'icono' => 'fa-truck-fast', 'texto' => 'GUIAS (Despachos)'),
+    array('id' => 'despachosconductor', 'icono' => 'fa-truck-ramp-box', 'texto' => 'Despachos conductor'),
+    array('id' => 'listarotacion', 'icono' => 'fa-sync-alt', 'texto' => 'Rotacion Inventario'),
+    array('id' => 'pedidosgeneradosauto', 'icono' => 'fa-table', 'texto' => 'Pedidos Generados'),
+    array('id' => 'listaestados', 'icono' => 'fa-clipboard-list', 'texto' => 'Estados Pedidos'),
+    array('id' => 'configuracionvencimientoxgrupos', 'icono' => 'fa-hourglass-end', 'texto' => 'Configuracion Vencimiento por grupos'),
+    array('id' => 'recalcularnumericas', 'icono' => 'fa-history', 'texto' => 'Recalcular Numericas'),
+    array('id' => 'listaconfiguracionlineas', 'icono' => 'fa-table', 'texto' => 'Configuracion Lineas'),
+    array('id' => 'listadoproductosclasificados', 'icono' => 'fa-boxes', 'texto' => 'Productos Clasificados')
+);
+
+$menusPrincipalesPermitidos = array();
+foreach ($menusPrincipalesDef as $menuDef) {
+    if (usuarioTienePermisoMenu($usuarioSesion, $menuDef['id'])) {
+        $menusPrincipalesPermitidos[] = $menuDef;
+    }
+}
 ?>
 
 <html lang="es" data-bs-theme="auto">
 <head>
-    <!-- Metadatos -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="Página Principal">
+    <meta name="description" content="Pagina Principal">
     <meta name="author" content="Leonardo Navarro">
+    <title>GESTI&Oacute;N DE INVENTARIOS Y DESPACHOS</title>
+    <link rel="icon" type="image/svg+xml" href="imagenes/favicon_gestion.svg">
 
-    <title>Página Principal</title>
-	
-	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-	<!-- Select2 -->
-	<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-beta.1/css/select2.min.css" rel="stylesheet" />
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-beta.1/js/select2.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-beta.1/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-beta.1/js/select2.min.js"></script>
 
-
-    <!-- Incluir estilos -->
     <link href="css/bootstrap.min.css" rel="stylesheet">
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/sidebars.css" rel="stylesheet">
+    <link href="css/menu_profesional.css?v=20260217_05" rel="stylesheet">
     <link href="css/bootstrap-clockpicker.css" rel="stylesheet">
     <link href="css/datatables.min.css" rel="stylesheet">
     <link href="css/alertify.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-	<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
 
-    <!-- Incluir scripts -->
     <script src="js/jquery-3.6.0.min.js"></script>
     <script src="js/sidebars.js"></script>
     <script src="js/popper.min.js"></script>
@@ -55,71 +79,99 @@ verificarSesion();
     <script src="js/jquery.blockUI.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="js/color-modes.js"></script>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script>
+        window.MENU_IDS_PERMITIDOS = <?php echo json_encode($idsPermitidos); ?>;
+        window.ES_USUARIO_ADMIN = <?php echo $esAdminMenu ? 'true' : 'false'; ?>;
+    </script>
     <script src="js/scripts.js?v=<?php echo date('Ymd_his'); ?>"></script>
 </head>
 
-<body class="bodyp">
-    <!-- Etiqueta para abrir/cerrar el sidebar -->
-    <label for="abrir-cerrar">
-        <div class="row">
-            <div class="col">
-                <span id="abr" class="abrir" onclick="mostrar()">&#9776; Abrir</span>
-            </div>
-            <div class="col text-end">
-                <span><?php echo htmlspecialchars($_SESSION["user"]); ?></span>
+<body class="bodyp layout-menu">
+    <header class="app-topbar">
+        <div class="app-topbar-left">
+            <button type="button" class="menu-toggle-btn" onclick="alternarSidebar()" aria-label="Abrir o cerrar menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="brand-block">
+                <span class="brand-title brand-title-desktop"><i class="fas fa-boxes-stacked brand-icon"></i> GESTI&Oacute;N DE INVENTARIOS Y DESPACHOS</span>
+                <span class="brand-title brand-title-mobile"><i class="fas fa-boxes-stacked brand-icon"></i> DESPACHOS</span>
+                <span class="brand-subtitle">Panel operativo D17</span>
             </div>
         </div>
-    </label>
+        <div class="app-topbar-right">
+            <div class="user-menu" id="userMenu">
+                <button type="button" id="userMenuToggle" class="user-chip user-chip-btn" aria-expanded="false">
+                    <i class="fas fa-user-circle"></i>
+                    <?php echo htmlspecialchars($_SESSION["user"]); ?>
+                    <i class="fas fa-angle-down user-menu-arrow"></i>
+                </button>
+                <div id="userMenuDropdown" class="user-menu-dropdown" aria-hidden="true">
+                    <?php if (isset($menusUsuarioPermitidos['listaconfiguraciones'])): ?>
+                        <a href="#" class="user-menu-item" id="listaconfiguraciones">
+                            <i class="fas fa-cogs"></i>
+                            <span>Configuraciones</span>
+                        </a>
+                    <?php endif; ?>
+                    <?php if (isset($menusUsuarioPermitidos['listaconexiones'])): ?>
+                        <a href="#" class="user-menu-item" id="listaconexiones">
+                            <i class="fas fa-database"></i>
+                            <span>Conexiones</span>
+                        </a>
+                    <?php endif; ?>
+                    <?php if (isset($menusUsuarioPermitidos['permisosmenu'])): ?>
+                        <a href="#" class="user-menu-item" id="permisosmenu">
+                            <i class="fas fa-user-shield"></i>
+                            <span>Permisos de menu</span>
+                        </a>
+                    <?php endif; ?>
+                    <a href="#" class="user-menu-item item-danger" id="salir">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Salir</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
 
-    <!-- Sidebar -->
-    <div id="sidebar" class="sidebar">
-        <a href="#" class="boton-cerrar" onclick="ocultar()">&times;</a>
+    <div id="menu-overlay" class="menu-overlay" onclick="ocultar()"></div>
+
+    <aside id="sidebar" class="sidebar" aria-hidden="true">
+        <div class="sidebar-head">
+            <div class="sidebar-head-text">
+                <h2 class="sidebar-title">Menu Principal</h2>
+                <p class="sidebar-subtitle">Reportes y configuracion</p>
+            </div>
+            <div class="sidebar-head-actions">
+                <button type="button" id="menuModeToggle" class="menu-mode-toggle" aria-label="Alternar menu iconos/completo">
+                    <i class="fas fa-compress-arrows-alt"></i>
+                </button>
+                <a href="#" class="boton-cerrar" onclick="ocultar()" aria-label="Cerrar menu">&times;</a>
+            </div>
+        </div>
+
         <ul class="menu">
             <?php
-            // Función para generar los enlaces del menú
             function generarEnlaceMenu($id, $icono, $texto) {
                 echo '<li>';
-                echo '<a href="#" class="nav-link text-white" id="' . $id . '">';
-                echo '<i class="fas ' . $icono . '"></i> ' . $texto;
+                echo '<a href="#" class="menu-link" id="' . $id . '">';
+                echo '<i class="fas ' . $icono . '"></i><span>' . $texto . '</span>';
                 echo '</a>';
                 echo '</li>';
             }
 
-            // Generar enlaces del menú
-            generarEnlaceMenu("listasmovsexis", "fa-tachometer-alt", "Lista sin Mov y sin Exis"); // Enlace para la lista sin movimientos y sin existencias
-            generarEnlaceMenu("listasmovcexis", "fa-table", "Lista Sin Mov y Con Exis"); // Enlace para la lista sin movimientos y con existencias
-            generarEnlaceMenu("listaclasificac", "fa-chart-pie", "ABC Costo Inventario"); // Enlace para la clasificación ABC del costo de inventario
-            //generarEnlaceMenu("listaabcexistenciainventario", "fa-boxes", "ABC Existencia Inventario"); // Enlace para la clasificación ABC de la existencia en inventario
-            //generarEnlaceMenu("listaabcventainventario", "fa-shopping-cart", "ABC Venta Inventario"); // Enlace para la clasificación ABC de la venta en inventario
-            //generarEnlaceMenu("listaabccostorepuestos", "fa-tools", "ABC Costo Repuestos"); // Enlace para la clasificación ABC del costo de repuestos
-            //generarEnlaceMenu("listaabccostomotos", "fa-motorcycle", "ABC Costo Motos"); // Enlace para la clasificación ABC del costo de motos
-            //generarEnlaceMenu("listaabcexistenciarepuestos", "fa-cogs", "ABC Existencia Repuestos"); // Enlace para la clasificación ABC de la existencia de repuestos
-            //generarEnlaceMenu("listaabcexistenciamotos", "fa-motorcycle", "ABC Existencia Motos"); // Enlace para la clasificación ABC de la existencia de motos
-            //generarEnlaceMenu("listaabcventarepuestos", "fa-tools", "ABC Venta Repuestos"); // Enlace para la clasificación ABC de la venta de repuestos
-            //generarEnlaceMenu("listaabcventamotos", "fa-motorcycle", "ABC Venta Motos"); // Enlace para la clasificación ABC de la venta de motos
-            //generarEnlaceMenu("comparativo", "fa-balance-scale", "Comparativo"); // Enlace para el comparativo
-            generarEnlaceMenu("log", "fa-history", "Log Máximos y Mínimos"); // Enlace para el log de máximos y mínimos
-			generarEnlaceMenu("backorder", "fa-table", "BackOrder");
-            //generarEnlaceMenu("informeped", "fa-file-alt", "Informe Pedido Actual"); // Enlace para el informe del pedido actual
-            generarEnlaceMenu("listarotacion", "fa-sync-alt", "Rotación Inventario"); // Enlace para la rotación de inventario
-			generarEnlaceMenu("pedidosgeneradosauto", "fa-table", "Pedidos Generados");
-            generarEnlaceMenu("listaestados", "fa-clipboard-list", "Estados Pedidos"); // Enlace para los estados de pedidos
-            generarEnlaceMenu("configuracionvencimientoxgrupos", "fa-hourglass-end", "Configuración Vencimiento por grupos"); // Enlace Configuración Vencimiento por grupos
-            generarEnlaceMenu("recalcularnumericas", "fa-history", "Recalcular Numéricas");
-			generarEnlaceMenu("listaconfiguracionlineas", "fa-table", "Configuración Lineas");
-			generarEnlaceMenu("listadoproductosclasificados", "fa-boxes", "Productos Clasificados");
-			generarEnlaceMenu("listaconexiones", "fa-database", "Conexiones"); // Enlace para las conexiones
-            generarEnlaceMenu("listaconfiguraciones", "fa-cogs", "Configuraciones"); // Enlace para las configuraciones
-            generarEnlaceMenu("salir", "fa-sign-out-alt", "Salir"); // Enlace para salir
+            foreach ($menusPrincipalesPermitidos as $menuDef) {
+                generarEnlaceMenu($menuDef['id'], $menuDef['icono'], $menuDef['texto']);
+            }
             ?>
         </ul>
-    </div>
+    </aside>
 
-    <!-- Contenido principal -->
-    <div id="contenido" class="container-fluid">
-        <center></center>
-    </div>
+    <main id="contenido" class="container-fluid content-shell">
+        <section class="tab-workspace">
+            <nav id="tabBar" class="tab-bar" aria-label="Pestanas abiertas"></nav>
+            <section id="tabPanels" class="tab-panels"></section>
+        </section>
+    </main>
 </body>
 </html>

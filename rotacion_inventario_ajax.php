@@ -8,102 +8,30 @@ include_once 'php/importarExcel.php';
 session_start();
 ?>
 
-<html lang="en" dir="ltr">
-  <head>
-    <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title></title>
-
-	<!-- Scripts CSS -->
-	<link rel="stylesheet" href="css/bootstrap.min.css">
-	<link rel="stylesheet" href="css/datatables.min.css">
-	<link rel="stylesheet" href="css/bootstrap-clockpicker.css">
-	<link rel="stylesheet" href="css/alertify.min.css">
-	<link rel="stylesheet" href="fullcalendar/main.css">
-	<link rel="stylesheet" href="css/sortable-theme-dark.css" />
-	
-		
-
-	<!-- Scripts JS -->
-	<script src="js/jquery-3.6.0.min.js"></script>
-	<script src="js/popper.min.js"></script>
-	<script src="js/bootstrap.min.js"></script>
-	<script src="js/datatables.min.js"></script>
-	<script src="js/bootstrap-clockpicker.js"></script>
-	<script src="js/moment-with-locales.js"></script>
-	<script src="js/alertify.js"></script>
-	<script src="js/jquery.blockUI.js"></script>
-	<script src="js/jquery.quicksearch.js"></script>
-	<script type="text/javascript" src="https://unpkg.com/xlsx@0.15.1/dist/xlsx.full.min.js"></script>
-	<script src="js/sortable.min.js"></script>
-
-	</head>
-
-<?php
-echo '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">';
-echo "<div class='' style='overflow:auto;width:100%;'>";
-?>
-<!--<center><button  type="button" class="btn btn-primary" id="btnExport" onclick="exportTableToExcel('dato_productos');">Exportar Excel</button></center> -->
-<?php
-echo "<br>";
-?>
 <style>
-td{
-	text-align:right;
+.rotacion-result-wrap {
+    width: 100%;
 }
-thead tr td { 
-	position: sticky;
-	top: 0;
-	z-index: 10;
+.rotacion-result-wrap .table-responsive {
+    max-height: 72vh;
+    overflow: auto;
+    border: 1px solid #d6e3ef;
+    border-radius: 12px;
+}
+.rotacion-result-wrap table th,
+.rotacion-result-wrap table td {
+    text-align: left;
+    white-space: nowrap;
+}
+.rotacion-result-wrap table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
 }
 </style>
 
-<script>
-function doSearch(e)
-{
-
-	var code = (e.keyCode ? e.keyCode : e.which);
-
-	if(code == 13) {
-
-		return false;
-
-	}else{
-
-		var tableReg = document.getElementById('dato_productos');
-		var searchText = document.getElementById('searchTerm').value.toLowerCase();
-		var cellsOfRow="";
-		var found=false;
-		var compareWith="";
-
-		// Recorremos todas las filas con contenido de la tabla
-		for (var i = 1; i < tableReg.rows.length; i++)
-		{
-			cellsOfRow = tableReg.rows[i].getElementsByTagName('td');
-			found = false;
-			// Recorremos todas las celdas
-			for (var j = 0; j < cellsOfRow.length && !found; j++)
-			{
-				compareWith = cellsOfRow[j].innerHTML.toLowerCase();
-				// Buscamos el texto en el contenido de la celda
-				if (searchText.length === 0 || (compareWith.indexOf(searchText) > -1))
-				{
-					found = true;
-				}
-			}
-			if(found)
-			{
-				tableReg.rows[i].style.display = '';
-			} else {
-				// si no ha encontrado ninguna coincidencia, esconde la
-				// fila de la tabla
-				tableReg.rows[i].style.display = 'none';
-			}
-		}
-	}
-}
-</script>
 <?php
+echo "<div class='rotacion-result-wrap'>";
 
 //******************************************************************************************************************
 $bd           = '';
@@ -341,25 +269,28 @@ if(isset($_POST['cant']))
 			if($vcount==0)
 			{
 				//ponemos los titulos
-				echo "<table border='1' id='dato_productos' class='table' style='margin-left:2px;margin-right:2px;width:99%;'>";
-				echo "<thead>";
+				echo "<div class='table-responsive'>";
+				echo "<table border='1' id='dato_productos' class='table table-striped table-hover table-sm mb-0' style='width:100%;'>";
+				echo "<thead class='table-dark'>";
 				echo "<tr>";	
-				echo "<td style='color:white;background:black;text-align:left;'>FAMILIA</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>LINEA</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>CODIGO</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>DESCRIPCION</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>EXISTENCIA</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>A 30 DÍAS</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>A 60 DÍAS</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>A 90 DÍAS</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>A 120 DÍAS</td>";
-				echo "<td style='color:white;background:black;text-align:left;'>MÁS DE 120 DÍAS</td>";
+				echo "<th>FAMILIA</th>";
+				echo "<th>LINEA</th>";
+				echo "<th>CODIGO</th>";
+				echo "<th>DESCRIPCION</th>";
+				echo "<th>EXISTENCIA</th>";
+				echo "<th>A 30 DIAS</th>";
+				echo "<th>A 60 DIAS</th>";
+				echo "<th>A 90 DIAS</th>";
+				echo "<th>A 120 DIAS</th>";
+				echo "<th>MAS DE 120 DIAS</th>";
 				echo "</tr>";
 				echo "</thead>";
+				echo "<tbody>";
 			}//fin $vcount
 			
 			$vcantidades_compradas = 0;
 			$vcantidades_vendidas  = 0;
+			$vcantidad_dias = 0;
 			
 			if(!empty($r->FECULTPROV) and !empty($r->FECULTCLI))
 			{
@@ -396,51 +327,51 @@ if(isset($_POST['cant']))
 			echo "<td style='text-align:left;'>".utf8_encode($r->LINEA)."</td>";
 			echo "<td style='text-align:left;'>".utf8_encode($r->CODIGO)."</td>";
 			echo "<td style='text-align:left;'>".utf8_encode($r->DESCRIP)."</td>";
-			echo "<td style='text-align:left;'>".number_format($r->EXISTENCIA)."</td>";
+			echo "<td style='text-align:right;'>".number_format($r->EXISTENCIA)."</td>";
 			
 			if($vcantidad_dias>=0 and $vcantidad_dias<=30)
 			{
-				echo "<td style='text-align:left;'>".number_format($vcantidad_dias)."</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
+				echo "<td style='text-align:right;'>".number_format($vcantidad_dias)."</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
 			}
 			
 			if($vcantidad_dias>30 and $vcantidad_dias<=60)
 			{
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>".number_format($vcantidad_dias)."</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>".number_format($vcantidad_dias)."</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
 			}
 			
 			if($vcantidad_dias>60 and $vcantidad_dias<=90)
 			{
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>".number_format($vcantidad_dias)."</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>".number_format($vcantidad_dias)."</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
 			}
 			
 			if($vcantidad_dias>90 and $vcantidad_dias<=120)
 			{
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>".number_format($vcantidad_dias)."</td>";
-				echo "<td style='text-align:left;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>".number_format($vcantidad_dias)."</td>";
+				echo "<td style='text-align:right;'>0</td>";
 			}
 			
 			if($vcantidad_dias>120)
 			{
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>0</td>";
-				echo "<td style='text-align:left;'>".number_format($vcantidad_dias)."</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>0</td>";
+				echo "<td style='text-align:right;'>".number_format($vcantidad_dias)."</td>";
 			}
 			echo "</tr>";
 			
@@ -448,8 +379,16 @@ if(isset($_POST['cant']))
 		}//fin while
 	}//fin recorrer productos
 }	
-//echo "</tbody>";
-echo "</table>";
+if($vcount>0)
+{
+	echo "</tbody>";
+	echo "</table>";
+	echo "</div>";
+}
+else
+{
+	echo "<div class='alert alert-light border m-2'>No hay informacion para los filtros seleccionados.</div>";
+}
 echo "</div>";
 ?>
 <script>
@@ -489,3 +428,23 @@ function exportTableToExcel(tableID, filename = ''){
 }
 
 </script>
+
+<script>
+if (window.jQuery && jQuery.fn && jQuery.fn.DataTable && jQuery('#dato_productos').length) {
+    jQuery('#dato_productos').DataTable({
+        destroy: true,
+        pageLength: 25,
+        lengthChange: false,
+        ordering: true,
+        info: true,
+        scrollX: true,
+        language: {
+            search: 'Buscar:',
+            emptyTable: 'No hay datos disponibles',
+            info: 'Mostrando _START_ a _END_ de _TOTAL_',
+            paginate: { previous: '<', next: '>' }
+        }
+    });
+}
+</script>
+

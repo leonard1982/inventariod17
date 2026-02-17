@@ -158,8 +158,8 @@ if($_SERVER['REQUEST_METHOD'] === 'GET' or $_SERVER['REQUEST_METHOD'] === 'POST'
 
     if ($vc = $conect_bd_actual->consulta($vsql)){
         ?>
-        <div <?php echo isset($_GET['anios']) ? '' : ' class="table-responsive" '; ?> >
-            <table <?php echo isset($_GET['anios']) ? '' : ' class="table table-striped table-bordered" '; ?> data-sortable style="align:center;" id="tabledatos">
+        <div <?php echo isset($_GET['anios']) ? '' : ' class="table-responsive report-table-wrap" '; ?> >
+            <table <?php echo isset($_GET['anios']) ? '' : ' class="table table-striped table-bordered report-table" '; ?> data-sortable style="align:center;" id="tabledatos">
                 <thead>
                 <tr>
                     <th></th>
@@ -277,7 +277,7 @@ if($_SERVER['REQUEST_METHOD'] === 'GET' or $_SERVER['REQUEST_METHOD'] === 'POST'
         }
 
         // Mostrar el total de registros, el total de páginas y el número de página actual
-        echo '<div style="text-align: center; margin-top: 10px;">';
+        echo '<div class="report-summary">';
         echo 'Total de registros: <strong>' . $totalRecords . '</strong> | ';
         echo 'Total de paginas: <strong>' . $totalPages . '</strong> | ';
         echo 'Pagina actual: <strong>' . $page . '</strong>';
@@ -286,11 +286,11 @@ if($_SERVER['REQUEST_METHOD'] === 'GET' or $_SERVER['REQUEST_METHOD'] === 'POST'
         if(!isset($_GET["anios"]))
         {
             // Controles de paginación
-            echo '<nav aria-label="Page navigation" style="display: flex; justify-content: center;">';
-            echo '<ul class="pagination">';
+            echo '<nav aria-label="Page navigation" class="report-pagination-nav" style="display:flex;justify-content:center;">';
+            echo '<ul class="pagination report-pagination" style="justify-content:center;">';
             if ($page > 1) {
-                echo '<li class="page-item"><a class="page-link" href="#" onclick="cambiarPagina(1, \'ListaSinMovSinExis_ajax.php\', \'Productos\')"><<</a></li>';
-                echo '<li class="page-item"><a class="page-link" href="#" onclick="cambiarPagina(' . ($page - 1) . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')"><</a></li>';
+                echo '<li class="page-item"><a class="page-link" title="Primera pagina" href="#" onclick="cambiarPagina(1, \'ListaSinMovSinExis_ajax.php\', \'Productos\')"><i class="fas fa-angles-left"></i></a></li>';
+                echo '<li class="page-item"><a class="page-link" title="Pagina anterior" href="#" onclick="cambiarPagina(' . ($page - 1) . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')"><i class="fas fa-angle-left"></i></a></li>';
             }
             $maxPages = min($totalPages, 10);
             $startPage = max(1, $page - floor($maxPages / 2));
@@ -299,8 +299,8 @@ if($_SERVER['REQUEST_METHOD'] === 'GET' or $_SERVER['REQUEST_METHOD'] === 'POST'
                 echo '<li class="page-item ' . ($i == $page ? 'active' : '') . '"><a class="page-link" href="#" onclick="cambiarPagina(' . $i . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')">' . $i . '</a></li>';
             }
             if ($page < $totalPages) {
-                echo '<li class="page-item"><a class="page-link" href="#" onclick="cambiarPagina(' . ($page + 1) . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')">></a></li>';
-                echo '<li class="page-item"><a class="page-link" href="#" onclick="cambiarPagina(' . $totalPages . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')">>></a></li>';
+                echo '<li class="page-item"><a class="page-link" title="Pagina siguiente" href="#" onclick="cambiarPagina(' . ($page + 1) . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')"><i class="fas fa-angle-right"></i></a></li>';
+                echo '<li class="page-item"><a class="page-link" title="Ultima pagina" href="#" onclick="cambiarPagina(' . $totalPages . ', \'ListaSinMovSinExis_ajax.php\', \'Productos\')"><i class="fas fa-angles-right"></i></a></li>';
             }
             echo '</ul>';
             echo '</nav>';

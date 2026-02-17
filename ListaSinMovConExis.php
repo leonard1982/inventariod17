@@ -14,13 +14,13 @@ include_once 'php/importarExcel.php';
     <?php includeAssets(); ?>
 
 
-    <script src="js/ItemsMenu.js?v=05092024_01"></script>
-    <link rel="stylesheet" href="css/ListaSinMovConExis.css?v=20240913_01">
+    <script src="js/ItemsMenu.js?v=20260217_02"></script>
+    <link rel="stylesheet" href="css/ListaSinMovConExis.css?v=20260217_03">
 </head>
 
-<body class="bodyc">
-    <div class="container">
-        <div class="container-fluid" style="width:100%;">
+<body class="bodyc report-page">
+    <div class="container report-shell report-shell-wide">
+        <div class="container-fluid report-card" style="width:100%;">
             <center>
                 <br>
                 <h2 id="titulo">PRODUCTOS SIN MOVIMIENTO Y CON EXISTENCIA</h2>
@@ -114,7 +114,7 @@ include_once 'php/importarExcel.php';
                     </div>
                 </div>
             </form>
-            <div id="contenidosmovsexis" class="table-responsive" style="width: 100%;"></div>
+            <div id="contenidosmovsexis" class="table-responsive result-panel" style="width: 100%;"></div>
         </div>
     </div>
     <?php

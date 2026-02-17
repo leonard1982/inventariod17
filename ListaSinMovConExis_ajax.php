@@ -117,9 +117,9 @@ if (isset($_POST['reg']) or isset($_GET['reg'])) {
 	{
 		?>
 		
-		<div class="table-responsive">
+		<div class="table-responsive sinmovcexis-grid">
 			
-			<table  class="table table-striped table-bordered" data-sortable style="align:center; width:100%;" id="tabledatos">
+			<table  class="table table-striped table-bordered" style="align:center; min-width:2050px; width:max-content;" id="tabledatos">
 				<thead>
 				<th></th>
 				<th><center>CODIGO</center></th>

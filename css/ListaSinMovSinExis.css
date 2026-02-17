@@ -1,0 +1,232 @@
+:root {
+  --rpt-bg: #f3f6fa;
+  --rpt-card: #ffffff;
+  --rpt-border: #d7e2ee;
+  --rpt-text: #17324b;
+  --rpt-muted: #5e7185;
+  --rpt-primary: #22628f;
+  --rpt-primary-dark: #164a70;
+  --rpt-success: #1f7e5a;
+  --rpt-success-dark: #176348;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+}
+
+body.report-page {
+  margin: 0;
+  background:
+    radial-gradient(circle at 100% 0%, #e8f0f8 0%, rgba(232, 240, 248, 0) 46%),
+    linear-gradient(180deg, #f9fbfd 0%, var(--rpt-bg) 100%);
+  color: var(--rpt-text);
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+}
+
+.report-shell {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0.9rem 0.6rem 1rem;
+}
+
+.report-card {
+  background: var(--rpt-card);
+  border: 1px solid var(--rpt-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 26px rgba(15, 44, 70, 0.1);
+  padding: 1rem 1rem 1.2rem;
+}
+
+.report-title {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #0f2e49;
+}
+
+.report-form {
+  border: 1px solid #dbe6f1;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f9ff 100%);
+  padding: 0.85rem;
+}
+
+.report-form .form-label {
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--rpt-muted);
+}
+
+.report-form .form-control,
+.report-form .form-select {
+  height: 42px;
+  border: 1px solid #c6d6e6;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--rpt-text);
+  box-shadow: none;
+}
+
+.report-form .form-control:focus,
+.report-form .form-select:focus {
+  border-color: #8eb7d9;
+  box-shadow: 0 0 0 3px rgba(34, 98, 143, 0.14);
+}
+
+.action-buttons .btn {
+  min-height: 42px;
+  font-weight: 700;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.action-buttons #actualizar {
+  background: linear-gradient(120deg, var(--rpt-success) 0%, var(--rpt-success-dark) 100%);
+}
+
+.action-buttons #btnExport {
+  background: linear-gradient(120deg, var(--rpt-primary) 0%, var(--rpt-primary-dark) 100%);
+}
+
+.action-buttons .btn:hover {
+  filter: brightness(1.02);
+}
+
+.result-panel {
+  margin-top: 0.8rem;
+  border: 1px solid var(--rpt-border);
+  border-radius: 14px;
+  background: #fff;
+  min-height: 300px;
+  box-shadow: inset 0 1px 0 #ffffff;
+  overflow: auto;
+}
+
+.report-table-wrap {
+  border-radius: 14px;
+}
+
+.report-table {
+  margin-bottom: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, #e8f1fa 0%, #dceaf7 100%);
+  color: #173d5c;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #c6d9ea;
+  white-space: nowrap;
+}
+
+.report-table tbody td {
+  vertical-align: middle;
+  border-color: #e3edf7;
+  font-size: 0.86rem;
+}
+
+.report-table tbody tr:nth-child(even) td {
+  background: #f9fcff;
+}
+
+.report-table tbody tr:hover td {
+  background: #eef6ff;
+}
+
+.report-table tbody td:first-child {
+  font-weight: 700;
+  color: #355673;
+}
+
+.result-panel table {
+  margin-bottom: 0;
+}
+
+.result-panel thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f1f6fb;
+  color: #1a4160;
+}
+
+.report-summary {
+  margin-top: 0.65rem;
+  text-align: center;
+  color: #355673;
+  font-size: 0.89rem;
+}
+
+.report-pagination-nav {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.45rem;
+}
+
+.report-pagination {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  gap: 0.2rem;
+}
+
+.report-pagination .page-link {
+  min-width: 34px;
+  border-radius: 9px;
+  border-color: #c7d9ea;
+  color: #25577f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-pagination .page-item.active .page-link {
+  background: #1f5f8d;
+  border-color: #1f5f8d;
+}
+
+@media (max-width: 992px) {
+  .report-shell {
+    max-width: 100%;
+    padding: 0.6rem 0.3rem 0.8rem;
+  }
+
+  .report-card {
+    border-radius: 14px;
+    padding: 0.8rem 0.75rem 0.95rem;
+  }
+
+  .action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .action-buttons .btn {
+    width: 100%;
+    border-radius: 10px;
+  }
+
+  .report-form {
+    padding: 0.7rem;
+  }
+
+  .report-table tbody td {
+    font-size: 0.82rem;
+  }
+}

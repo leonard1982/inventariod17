@@ -1,0 +1,58 @@
+.report-shell-wide.container {
+  max-width: 1880px !important;
+  width: 99vw;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body.modulo-theme-ready .report-shell-wide.container {
+  max-width: 1880px !important;
+  width: 99vw;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+body.modulo-theme-ready .report-shell-wide .report-card {
+  border-radius: 16px;
+}
+
+body.modulo-theme-ready .report-shell-wide .result-panel {
+  min-height: 320px;
+  overflow: auto;
+}
+
+.report-shell-wide #contenidosmovsexis .sinmovcexis-grid,
+body.modulo-theme-ready .report-shell-wide #contenidosmovsexis .sinmovcexis-grid {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.report-shell-wide #contenidosmovsexis #tabledatos,
+body.modulo-theme-ready .report-shell-wide #contenidosmovsexis #tabledatos {
+  min-width: 2050px !important;
+  width: max-content !important;
+}
+
+.report-shell-wide #contenidosmovsexis #tabledatos th,
+.report-shell-wide #contenidosmovsexis #tabledatos td,
+body.modulo-theme-ready .report-shell-wide #contenidosmovsexis #tabledatos th,
+body.modulo-theme-ready .report-shell-wide #contenidosmovsexis #tabledatos td {
+  white-space: nowrap;
+}
+
+.report-shell-wide #contenidosmovsexis #tabledatos td:nth-child(3),
+body.modulo-theme-ready .report-shell-wide #contenidosmovsexis #tabledatos td:nth-child(3) {
+  min-width: 340px;
+}
+
+@media (max-width: 1200px) {
+  .report-shell-wide.container {
+    max-width: 100% !important;
+    width: 100%;
+  }
+
+  body.modulo-theme-ready .report-shell-wide.container {
+    max-width: 100% !important;
+    width: 100%;
+  }
+}

@@ -26,6 +26,16 @@ require("conecta.php");
         padding: 5px 10px;
         vertical-align: middle;
       }
+      .log-progress-wrap {
+        max-width: 700px;
+        margin: 10px auto 12px;
+        display: none;
+      }
+      .log-progress-text {
+        font-size: 0.85rem;
+        color: #4f667b;
+        margin-bottom: 5px;
+      }
     </style>
   </head>
   <body class="bodylog">
@@ -98,10 +108,45 @@ require("conecta.php");
 	  </form>
 	</div>
 
+    <div id="logProgressWrap" class="log-progress-wrap">
+      <div class="log-progress-text"><i class="fas fa-cogs"></i> Generando informe, por favor espera...</div>
+      <div class="progress">
+        <div id="logProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 0%">0%</div>
+      </div>
+    </div>
 	
     <div id="contenidolog"></div>
 
     <script>
+	let logProgressTimer = null;
+
+	function iniciarProgresoLog() {
+	  var progreso = 3;
+	  $('#logProgressWrap').show();
+	  $('#logProgressBar').css('width', progreso + '%').text(progreso + '%');
+	  if (logProgressTimer) {
+		clearInterval(logProgressTimer);
+	  }
+	  logProgressTimer = setInterval(function() {
+		if (progreso < 90) {
+		  progreso += 2;
+		  $('#logProgressBar').css('width', progreso + '%').text(progreso + '%');
+		}
+	  }, 380);
+	}
+
+	function finalizarProgresoLog() {
+	  if (logProgressTimer) {
+		clearInterval(logProgressTimer);
+		logProgressTimer = null;
+	  }
+	  $('#logProgressBar').css('width', '100%').text('100%');
+	  setTimeout(function() {
+		$('#logProgressWrap').hide();
+		$('#logProgressBar').css('width', '0%').text('0%');
+	  }, 300);
+	}
+
 	$(document).ready(function()
 	{
 		console.log('jQuery versión:', $.fn.jquery);
@@ -161,7 +206,7 @@ require("conecta.php");
           reverseButtons: true
         }).then((result) => {
           if (result.isConfirmed) {
-            $('.bodyp').block({
+            $('body').block({
               message: 'Cargando',
               css: {
                 border: 'none',
@@ -173,6 +218,7 @@ require("conecta.php");
                 color: '#fff'
               }
             });
+            iniciarProgresoLog();
 
             var grupo = $('#grupo').val();
 			var reg = $('#reg').val();
@@ -185,6 +231,7 @@ require("conecta.php");
 			$.ajax({
 			  type: "POST",
 			  url: "index2_detalle.php",
+			  timeout: 600000,
 			  data: { 
 				"grupo": grupo, 
 				"reg": reg, 
@@ -194,7 +241,14 @@ require("conecta.php");
 			  },
 			  success: function(response) {
 				$('#contenidolog').html(response);
-				$('.bodyp').unblock();
+			  },
+			  error: function(xhr, status) {
+				var mensaje = status === 'timeout' ? 'El proceso esta tardando demasiado. Intenta con menos registros.' : 'No se pudo generar el informe.';
+				Swal.fire('Atencion', mensaje, 'warning');
+			  },
+			  complete: function() {
+				finalizarProgresoLog();
+				$('body').unblock();
 			  }
 			});
 

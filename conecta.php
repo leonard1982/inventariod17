@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // Establece la zona horaria
 date_default_timezone_set('America/Bogota');
 
@@ -247,6 +247,287 @@ function includeAssets() {
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
     ';
 }
+
+function normalizarUsuarioMenu($usuario) {
+    return strtoupper(trim((string)$usuario));
+}
+
+function obtenerCatalogoMenusAplicacion() {
+    return array(
+        'listasmovsexis' => array('texto' => 'Lista sin Mov y sin Exis', 'tipo' => 'principal', 'url' => 'ListaSinMovSinExis.php'),
+        'listasmovcexis' => array('texto' => 'Lista sin Mov y con Exis', 'tipo' => 'principal', 'url' => 'ListaSinMovConExis.php'),
+        'listacmovsexis' => array('texto' => 'Lista con Mov y sin Exis', 'tipo' => 'principal', 'url' => 'ListaConMovSinExis.php'),
+        'listaclasificac' => array('texto' => 'ABC Costo Inventario', 'tipo' => 'principal', 'url' => 'ListaClasificacionCosto.php'),
+        'log' => array('texto' => 'Log Maximos y Minimos', 'tipo' => 'principal', 'url' => 'Log_maximos_minimos.php'),
+        'backorder' => array('texto' => 'BackOrder', 'tipo' => 'principal', 'url' => 'backorder.php'),
+        'guiasdespachos' => array('texto' => 'GUIAS (Despachos)', 'tipo' => 'principal', 'url' => 'guias_despachos.php'),
+        'despachosconductor' => array('texto' => 'Despachos conductor', 'tipo' => 'principal', 'url' => 'despachos_conductor.php'),
+        'listarotacion' => array('texto' => 'Rotacion Inventario', 'tipo' => 'principal', 'url' => 'rotacion_inventario.php'),
+        'pedidosgeneradosauto' => array('texto' => 'Pedidos Generados', 'tipo' => 'principal', 'url' => 'PedidosGeneradosAutomaticamente.php'),
+        'listaestados' => array('texto' => 'Estados Pedidos', 'tipo' => 'principal', 'url' => 'estados_pedidos.php'),
+        'configuracionvencimientoxgrupos' => array('texto' => 'Configuracion Vencimiento por grupos', 'tipo' => 'principal', 'url' => 'ConfiguracionVencimientoPorProductos.php'),
+        'recalcularnumericas' => array('texto' => 'Recalcular Numericas', 'tipo' => 'principal', 'url' => 'recalcularnumericas.php'),
+        'listaconfiguracionlineas' => array('texto' => 'Configuracion Lineas', 'tipo' => 'principal', 'url' => 'ListaConfiguracionLineas.php'),
+        'listadoproductosclasificados' => array('texto' => 'Productos Clasificados', 'tipo' => 'principal', 'url' => 'listado_productos_clasificados.php'),
+        'listaconfiguraciones' => array('texto' => 'Configuraciones', 'tipo' => 'usuario', 'url' => 'ListaConfiguraciones.php'),
+        'listaconexiones' => array('texto' => 'Conexiones', 'tipo' => 'usuario', 'url' => 'conexiones.php'),
+        'permisosmenu' => array('texto' => 'Permisos de menu', 'tipo' => 'usuario', 'url' => 'permisos_menu.php', 'solo_admin' => true),
+        'salir' => array('texto' => 'Salir', 'tipo' => 'usuario', 'url' => 'index.php')
+    );
+}
+
+function esUsuarioAdministradorMenu($usuario) {
+    $usuarioNorm = normalizarUsuarioMenu($usuario);
+    if ($usuarioNorm === 'ADMIN') {
+        return true;
+    }
+
+    global $conect_bd_actual;
+    if (!$conect_bd_actual) {
+        return false;
+    }
+
+    $usuarioEsc = str_replace("'", "''", $usuarioNorm);
+    $sql = "SELECT FIRST 1 ROL FROM USUARIOS WHERE UPPER(NOMBRE) = '$usuarioEsc'";
+    if ($vc = $conect_bd_actual->consulta($sql)) {
+        if ($vr = ibase_fetch_object($vc)) {
+            $rol = strtoupper(trim((string)$vr->ROL));
+            if (in_array($rol, array('ADMIN', 'ADMINISTRADOR'), true)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function existeTablaPermisosMenu() {
+    global $conect_bd_inventario;
+    if (!$conect_bd_inventario) {
+        return false;
+    }
+
+    $sql = "SELECT FIRST 1 RDB\$RELATION_NAME FROM RDB\$RELATIONS WHERE RDB\$RELATION_NAME = 'SN_MENU_PERMISOS'";
+    if ($vc = $conect_bd_inventario->consulta($sql)) {
+        if (ibase_fetch_row($vc)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function obtenerEstadoPermisosMenuUsuario($usuario) {
+    static $cache = array();
+
+    $usuarioNorm = normalizarUsuarioMenu($usuario);
+    if ($usuarioNorm === '') {
+        return array(
+            'es_admin' => false,
+            'configurado' => false,
+            'permitidos' => array(),
+            'mapa' => array()
+        );
+    }
+
+    if (isset($cache[$usuarioNorm])) {
+        return $cache[$usuarioNorm];
+    }
+
+    $catalogo = obtenerCatalogoMenusAplicacion();
+    $todosIds = array_keys($catalogo);
+    $esAdmin = esUsuarioAdministradorMenu($usuarioNorm);
+
+    if ($esAdmin) {
+        $cache[$usuarioNorm] = array(
+            'es_admin' => true,
+            'configurado' => true,
+            'permitidos' => $todosIds,
+            'mapa' => array()
+        );
+        return $cache[$usuarioNorm];
+    }
+
+    global $conect_bd_inventario;
+    if (!$conect_bd_inventario || !existeTablaPermisosMenu()) {
+        $cache[$usuarioNorm] = array(
+            'es_admin' => false,
+            'configurado' => false,
+            'permitidos' => $todosIds,
+            'mapa' => array()
+        );
+        return $cache[$usuarioNorm];
+    }
+
+    $usuarioEsc = str_replace("'", "''", $usuarioNorm);
+    $sql = "SELECT MENU_ID, PERMITIDO FROM SN_MENU_PERMISOS WHERE UPPER(USUARIO) = '$usuarioEsc'";
+    $mapa = array();
+    $cont = 0;
+
+    if ($vc = $conect_bd_inventario->consulta($sql)) {
+        while ($vr = ibase_fetch_object($vc)) {
+            $menuId = strtolower(trim((string)$vr->MENU_ID));
+            $permitido = strtoupper(trim((string)$vr->PERMITIDO));
+            $mapa[$menuId] = ($permitido === 'S') ? 'S' : 'N';
+            $cont++;
+        }
+    }
+
+    if ($cont === 0) {
+        $cache[$usuarioNorm] = array(
+            'es_admin' => false,
+            'configurado' => false,
+            'permitidos' => $todosIds,
+            'mapa' => array()
+        );
+        return $cache[$usuarioNorm];
+    }
+
+    $permitidos = array('salir');
+    foreach ($mapa as $id => $flag) {
+        if ($flag === 'S') {
+            $permitidos[] = $id;
+        }
+    }
+
+    $cache[$usuarioNorm] = array(
+        'es_admin' => false,
+        'configurado' => true,
+        'permitidos' => array_values(array_unique($permitidos)),
+        'mapa' => $mapa
+    );
+    return $cache[$usuarioNorm];
+}
+
+function usuarioTienePermisoMenu($usuario, $menuId) {
+    $menu = strtolower(trim((string)$menuId));
+    if ($menu === '' || $menu === 'salir') {
+        return true;
+    }
+
+    $estado = obtenerEstadoPermisosMenuUsuario($usuario);
+    if ($estado['es_admin']) {
+        return true;
+    }
+
+    if (!$estado['configurado']) {
+        return true;
+    }
+
+    if (!isset($estado['mapa'][$menu])) {
+        return false;
+    }
+
+    return $estado['mapa'][$menu] === 'S';
+}
+
+function obtenerMenusPermitidosUsuario($usuario, $tipo = null) {
+    $catalogo = obtenerCatalogoMenusAplicacion();
+    $estado = obtenerEstadoPermisosMenuUsuario($usuario);
+    $esAdmin = $estado['es_admin'];
+    $resultado = array();
+
+    foreach ($catalogo as $menuId => $meta) {
+        if ($tipo !== null && isset($meta['tipo']) && $meta['tipo'] !== $tipo) {
+            continue;
+        }
+
+        $soloAdmin = !empty($meta['solo_admin']);
+        if ($soloAdmin && !$esAdmin) {
+            continue;
+        }
+
+        if (!usuarioTienePermisoMenu($usuario, $menuId)) {
+            continue;
+        }
+
+        $resultado[$menuId] = $meta;
+    }
+
+    return $resultado;
+}
+
+function obtenerMapaArchivoMenuAplicacion() {
+    return array(
+        'listasinmovsinexis.php' => 'listasmovsexis',
+        'listasinmovsinexis_ajax.php' => 'listasmovsexis',
+        'listasinmovconexis.php' => 'listasmovcexis',
+        'listasinmovconexis_ajax.php' => 'listasmovcexis',
+        'listaconmovsinexis.php' => 'listacmovsexis',
+        'listaconmovsinexis_ajax.php' => 'listacmovsexis',
+        'listaclasificacioncosto.php' => 'listaclasificac',
+        'log_maximos_minimos.php' => 'log',
+        'backorder.php' => 'backorder',
+        'backorder_detalle.php' => 'backorder',
+        'backorder_actualizar_estado.php' => 'backorder',
+        'guias_despachos.php' => 'guiasdespachos',
+        'guias_despachos_ajax.php' => 'guiasdespachos',
+        'guia_despacho_print.php' => 'guiasdespachos',
+        'despachos_conductor.php' => 'despachosconductor',
+        'despachos_conductor_ajax.php' => 'despachosconductor',
+        'rotacion_inventario.php' => 'listarotacion',
+        'rotacion_inventario_ajax.php' => 'listarotacion',
+        'pedidosgeneradosautomaticamente.php' => 'pedidosgeneradosauto',
+        'estados_pedidos.php' => 'listaestados',
+        'configuracionvencimientoporproductos.php' => 'configuracionvencimientoxgrupos',
+        'recalcularnumericas.php' => 'recalcularnumericas',
+        'recalcularnumericas_ajax.php' => 'recalcularnumericas',
+        'listaconfiguracionlineas.php' => 'listaconfiguracionlineas',
+        'configuracionlineas.php' => 'listaconfiguracionlineas',
+        'actualizarconfiguracionlinea.php' => 'listaconfiguracionlineas',
+        'listadoproductosclasificados.php' => 'listadoproductosclasificados',
+        'listaconfiguraciones.php' => 'listaconfiguraciones',
+        'configuraciones.php' => 'listaconfiguraciones',
+        'actualizarconfiguracion.php' => 'listaconfiguraciones',
+        'listaconfiguracioneseliminar.php' => 'listaconfiguraciones',
+        'conexiones.php' => 'listaconexiones',
+        'agregarconexion.php' => 'listaconexiones',
+        'borrarconexion.php' => 'listaconexiones',
+        'permisos_menu.php' => 'permisosmenu',
+        'permisos_menu_ajax.php' => 'permisosmenu'
+    );
+}
+
+function aplicarControlAccesoMenuActual() {
+    if (php_sapi_name() === 'cli') {
+        return;
+    }
+
+    if (empty($_SESSION['user'])) {
+        return;
+    }
+
+    $archivo = strtolower(basename((string)$_SERVER['SCRIPT_NAME']));
+
+    $excluir = array(
+        'index.php',
+        'validauser.php',
+        'principal.php',
+        'conecta.php'
+    );
+
+    if (in_array($archivo, $excluir, true)) {
+        return;
+    }
+
+    $mapa = obtenerMapaArchivoMenuAplicacion();
+    if (!isset($mapa[$archivo])) {
+        return;
+    }
+
+    $menuId = $mapa[$archivo];
+    if (usuarioTienePermisoMenu($_SESSION['user'], $menuId)) {
+        return;
+    }
+
+    if (!headers_sent()) {
+        http_response_code(403);
+    }
+    echo 'ACCESO DENEGADO: NO TIENE PERMISO PARA ESTE MODULO.';
+    exit;
+}
+
+aplicarControlAccesoMenuActual();
 
 //
 function enviarCorreoSMTP($destinatario, $asunto, $mensaje, $de, $nombreDe, $servidorSMTP, $puertoSMTP, $usuarioSMTP, $contrasenaSMTP, $bcc = null)

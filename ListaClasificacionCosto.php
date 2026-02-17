@@ -6,7 +6,8 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<title>ABC Costo Inventario</title>
 		<!--Llamamos las librerias css y js -->
-		<?php includeAssets(); ?>	
+		<?php includeAssets(); ?>
+		<link rel="stylesheet" href="css/ListaClasificacionCosto.css?v=20260217_02">
 	</head>	
 <?php
 
@@ -52,56 +53,46 @@
 
 		?>
 		
-		<div class="container">
-			<center>
-			<h4 id="titulo">ABC COSTO INVENTARIO</h4>
-			<center>
-				<div class="input-group" style="justify-content: center;">
-					<div style="align:left;">
-						<h4>Fecha de Corte: <?php echo date('d-m-Y H:i'); ?></h4>
-					</div>
-					<div style="width:300px;margin-left:10px;">
-						<input type="text" id="search" class="form-control" placeholder="Escribe para buscar..." />
-					</div>
-					
-					<div style="margin-left:10px;">
-						<button  type="button" class="btn btn-primary" id="btnExport" >Excel</button>
-					</div>
-					<div style="margin-left:10px;">
-						<table class="table table-striped table-bordered">
-							<thead>
-								<th><center><a href='#marcaTOTAL'>TOTAL</a></center></th>
-								<th><center><a href='#marca5'>5%</a></center></th>
-								<th><center><a href='#marca15'>15%</a></center></th>
-								<th><center><a href='#marca80'>80%</a></center></th>
-							</thead>
-							
-							<tbody>
-								<tr>
-									<td style="text-align:right;">
-										<?php echo number_format($v_totalcompleto); ?>
-									</td>
-									<td style="text-align:right;">
-										<?php echo number_format($v5); ?>
-									</td>
-									<td style="text-align:right;">
-										<?php echo number_format($v15); ?>
-									</td>
-									<td style="text-align:right;">
-										<?php echo number_format($v80); ?>
-									</td>
-								</tr>
-							</tbody>
-						</table>	
-					</div>
-				</div>	
-			</center>
-			<br>
-			<br>
-			<div class="table-responsived">
+		<div class="container abc-wrapper">
+			<div class="abc-header">
+				<h4 id="titulo">ABC COSTO INVENTARIO</h4>
+				<p class="abc-fecha"><i class="fas fa-calendar-alt"></i> Fecha de corte: <?php echo date('d-m-Y H:i'); ?></p>
+			</div>
+
+			<div class="abc-toolbar">
+				<div class="abc-search-wrap">
+					<label for="search"><i class="fas fa-search"></i> Buscar</label>
+					<input type="text" id="search" class="form-control" placeholder="Escribe para buscar..." />
+				</div>
+				<div class="abc-actions">
+					<button type="button" class="btn btn-primary" id="btnExport"><i class="fas fa-file-excel"></i> Excel</button>
+				</div>
+			</div>
+
+			<div class="abc-kpis">
+				<article class="abc-kpi-card" id="marcaTOTAL">
+					<span class="abc-kpi-label"><i class="fas fa-coins"></i> Total</span>
+					<strong><?php echo number_format($v_totalcompleto); ?></strong>
+				</article>
+				<article class="abc-kpi-card" id="marca5">
+					<span class="abc-kpi-label"><i class="fas fa-layer-group"></i> Tramo 5%</span>
+					<strong><?php echo number_format($v5); ?></strong>
+				</article>
+				<article class="abc-kpi-card" id="marca15">
+					<span class="abc-kpi-label"><i class="fas fa-layer-group"></i> Tramo 15%</span>
+					<strong><?php echo number_format($v15); ?></strong>
+				</article>
+				<article class="abc-kpi-card" id="marca80">
+					<span class="abc-kpi-label"><i class="fas fa-layer-group"></i> Tramo 80%</span>
+					<strong><?php echo number_format($v80); ?></strong>
+				</article>
+			</div>
+
+			<div class="table-responsive abc-table-wrap">
 			<p id='iniciotabla'></p>
-			<table class="table table-striped table-bordered" data-sortable style="align:center; width:100%;" id="tabledatos">
+			<table class="table table-striped table-bordered abc-table" style="align:center; width:100%;" id="tabledatos">
 				<thead>
+				<tr>
 				<th></th>
 				<th><center>CODIGO</center></th>
 				<th><center>PRODUCTO</center></th>
@@ -110,6 +101,7 @@
 				<th><center>TOTAL</center></th>
 				<th><center>%</center></th>
 				<th><center>UNIDAD</center></th>
+				</tr>
 				</thead>
 				<tbody id="cuerpo">
 				
@@ -178,12 +170,13 @@
 							<td>
 								
 							</td>
-							<td id="marca80" colspan="5" style="background-color:yellow;">
-								<center>SUBTOTAL APROX 80%</center>
+							<td id="marca80" colspan="5" class="abc-corte-row">
+								<center><i class="fas fa-chart-line"></i> SUBTOTAL APROX 80%</center>
 							</td>
 							<td style="text-align:right;">
 								<?php echo number_format($valor80); ?>
 							</td>
+							<td></td>
 						</tr>	
 					<?php	
 					}	
@@ -197,12 +190,13 @@
 							<td>
 								
 							</td>
-							<td id="marca15" colspan="5" style="background-color:yellow;">
-								<center>SUBTOTAL APROX 15%</center>
+							<td id="marca15" colspan="5" class="abc-corte-row">
+								<center><i class="fas fa-chart-bar"></i> SUBTOTAL APROX 15%</center>
 							</td>
 							<td style="text-align:right;">
 								<?php echo number_format($valor15); ?>
 							</td>
+							<td></td>
 						</tr>	
 					<?php	
 					}
@@ -215,12 +209,13 @@
 							<td>
 								
 							</td>
-							<td id="marca5" colspan="5" style="background-color:yellow;">
-								<center>SUBTOTAL APROX 5%</center>
+							<td id="marca5" colspan="5" class="abc-corte-row">
+								<center><i class="fas fa-chart-pie"></i> SUBTOTAL APROX 5%</center>
 							</td>
 							<td style="text-align:right;">
 								<?php echo number_format($valor5); ?>
 							</td>
+							<td></td>
 						</tr>	
 					<?php	
 					}
@@ -236,22 +231,23 @@
 						<td>
 							
 						</td>
-						<td id="marca5" colspan="5" style="background-color:yellow;">
-							<center>SUBTOTAL APROX 5%</center>
+						<td id="marca5" colspan="5" class="abc-corte-row">
+							<center><i class="fas fa-chart-pie"></i> SUBTOTAL APROX 5%</center>
 						</td>
 						<td style="text-align:right;">
 							<?php echo number_format($valor5); ?>
 						</td>
+						<td></td>
 					</tr>	
 				<?php	
 				}
 		?>
-				<tr>
+				<tr class="abc-total-row">
 						<td>
 							
 						</td>
 						<td id='marcaTOTAL' colspan="2" style="text-align:center;">
-							TOTALES
+							<i class="fas fa-calculator"></i> TOTALES
 						</td>
 						<td style="text-align:left;">
 							<?php echo number_format($v_existencia); ?>
@@ -268,7 +264,6 @@
 				</tbody>
 			</table>
 			</div>
-			</center>
 		</div>
 
 
@@ -331,8 +326,39 @@ function ExportToExcel(type, fn, dl) {
 }
 
 $(function () {
-		
-	$('#search').quicksearch('table tbody tr');								
+    if ($.fn.DataTable) {
+        $.fn.dataTable.ext.errMode = 'none';
+        var tablaAbc = $('#tabledatos').DataTable({
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']],
+            paging: true,
+            ordering: false,
+            dom: 'lrtip',
+            language: {
+                lengthMenu: 'Mostrar _MENU_ registros',
+                info: 'Mostrando _START_ a _END_ de _TOTAL_ registros',
+                infoEmpty: 'Sin registros disponibles',
+                infoFiltered: '(filtrado de _MAX_ registros)',
+                zeroRecords: 'No se encontraron resultados',
+                paginate: {
+                    first: '<<',
+                    previous: '<',
+                    next: '>',
+                    last: '>>'
+                }
+            }
+        });
+
+        $('#tabledatos').on('error.dt', function (e, settings, techNote, message) {
+            console.error('DataTables error:', message);
+        });
+
+        $('#search').on('keyup', function () {
+            tablaAbc.search($(this).val()).draw();
+        });
+    } else {
+        $('#search').quicksearch('table tbody tr');
+    }
 });
 
 </script>	
