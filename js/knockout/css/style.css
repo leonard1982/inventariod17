@@ -1,0 +1,27 @@
+body {
+  padding-top: 70px;
+  padding-bottom: 30px;
+}
+
+.theme-dropdown .dropdown-menu {
+  position: static;
+  display: block;
+  margin-bottom: 20px;
+}
+
+.theme-showcase > p > .btn {
+  margin: 5px 0;
+}
+
+.theme-showcase .navbar .container {
+  width: auto;
+}
+
+.tab-content {position: relative; height:255px;}
+.tab-content .well {
+	position: absolute;
+	top: 0;
+	width: 100%;
+}
+
+.pointer {cursor: pointer;}
