@@ -425,33 +425,43 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
     $resp['conductor'] = strtoupper(trim((string)$usuario));
 
     $ctx = dashboardContextoConductor($pdo, $usuario, $esAdmin);
+    $filtroConductor = '';
+    $paramsConductor = array();
+
     if ($ctx['es_admin']) {
         $resp['conductor'] = 'ADMIN';
         $resp['mensaje'] = 'Vista general habilitada para usuario administrador.';
-        return $resp;
+    } else {
+        if ((int)$ctx['terid'] <= 0) {
+            $resp['mensaje'] = 'No se encontro relacion usuario-conductor; muestra en cero hasta configurar VARIOS/TERCEROSSELF.';
+            return $resp;
+        }
+
+        $terid = (int)$ctx['terid'];
+        $resp['terid'] = $terid;
+        $filtroConductor = 'g.ID_CONDUCTOR = ?';
+        $paramsConductor = array($terid);
+
+        if (trim((string)$ctx['origen']) !== '') {
+            $resp['mensaje'] = 'Vinculado por: ' . trim((string)$ctx['origen']);
+        }
+
+        if (dashboardTablaExiste($pdo, 'TERCEROS')) {
+            $stmtNom = $pdo->prepare("SELECT FIRST 1 NOMBRE FROM TERCEROS WHERE TERID = ?");
+            $stmtNom->execute(array($terid));
+            $resp['conductor'] = dashboardTexto($stmtNom->fetchColumn());
+        }
     }
 
-    if ((int)$ctx['terid'] <= 0) {
-        $resp['mensaje'] = 'No se encontro relacion usuario-conductor; muestra en cero hasta configurar VARIOS/TERCEROSSELF.';
-        return $resp;
-    }
-
-    $terid = (int)$ctx['terid'];
-    $resp['terid'] = $terid;
-    if (trim((string)$ctx['origen']) !== '') {
-        $resp['mensaje'] = 'Vinculado por: ' . trim((string)$ctx['origen']);
-    }
-
-    if (dashboardTablaExiste($pdo, 'TERCEROS')) {
-        $stmtNom = $pdo->prepare("SELECT FIRST 1 NOMBRE FROM TERCEROS WHERE TERID = ?");
-        $stmtNom->execute(array($terid));
-        $resp['conductor'] = dashboardTexto($stmtNom->fetchColumn());
+    $whereGuiasPend = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'";
+    if ($filtroConductor !== '') {
+        $whereGuiasPend .= " AND " . $filtroConductor;
     }
 
     $resp['kpis']['guias_pendientes'] = dashboardInt(
         $pdo,
-        "SELECT COUNT(*) FROM SN_GUIAS g WHERE g.ID_CONDUCTOR = ? AND UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'",
-        array($terid)
+        "SELECT COUNT(*) FROM SN_GUIAS g WHERE " . $whereGuiasPend,
+        $paramsConductor
     );
 
     $hayEstadoDetalle = dashboardTablaExiste($pdo, 'SN_GUIAS_DETALLE_ESTADO');
@@ -461,32 +471,51 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
     $cntPar = 0;
 
     if ($hayEstadoDetalle) {
+        $whereBasePend = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'";
+        if ($filtroConductor !== '') {
+            $whereBasePend .= " AND " . $filtroConductor;
+        }
+
+        $whereBaseEstado = "1 = 1";
+        if ($filtroConductor !== '') {
+            $whereBaseEstado .= " AND " . $filtroConductor;
+        }
+
         $resp['kpis']['remisiones_pendientes'] = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE g.ID_CONDUCTOR = ? AND UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO' AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') <> 'ENTREGADO'",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE " . $whereBasePend . " AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') <> 'ENTREGADO'",
+            $paramsConductor
         );
 
         $cntPend = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE g.ID_CONDUCTOR = ? AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'PENDIENTE'",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE " . $whereBaseEstado . " AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'PENDIENTE'",
+            $paramsConductor
         );
         $cntEnt = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE g.ID_CONDUCTOR = ? AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'ENTREGADO'",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE " . $whereBaseEstado . " AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'ENTREGADO'",
+            $paramsConductor
         );
         $cntNoEnt = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE g.ID_CONDUCTOR = ? AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'NO_ENTREGADO'",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE " . $whereBaseEstado . " AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'NO_ENTREGADO'",
+            $paramsConductor
         );
         $cntPar = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE g.ID_CONDUCTOR = ? AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'ENTREGA_PARCIAL'",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID WHERE " . $whereBaseEstado . " AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') = 'ENTREGA_PARCIAL'",
+            $paramsConductor
         );
+
+        $whereEntregadasHoy = "
+               COALESCE(e.ESTADO_ENTREGA, '') = 'ENTREGADO'
+               AND EXTRACT(YEAR FROM e.FECHA_ESTADO) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+               AND EXTRACT(MONTH FROM e.FECHA_ESTADO) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+               AND EXTRACT(DAY FROM e.FECHA_ESTADO) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)";
+        if ($filtroConductor !== '') {
+            $whereEntregadasHoy .= " AND " . $filtroConductor;
+        }
 
         $resp['kpis']['entregadas_hoy'] = dashboardInt(
             $pdo,
@@ -494,13 +523,18 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
              FROM SN_GUIAS g
              INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID
              INNER JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID
-             WHERE g.ID_CONDUCTOR = ?
-               AND COALESCE(e.ESTADO_ENTREGA, '') = 'ENTREGADO'
+             WHERE " . $whereEntregadasHoy,
+            $paramsConductor
+        );
+
+        $whereIncidenciasHoy = "
+               COALESCE(e.ESTADO_ENTREGA, '') IN ('NO_ENTREGADO', 'ENTREGA_PARCIAL')
                AND EXTRACT(YEAR FROM e.FECHA_ESTADO) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
                AND EXTRACT(MONTH FROM e.FECHA_ESTADO) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-               AND EXTRACT(DAY FROM e.FECHA_ESTADO) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)",
-            array($terid)
-        );
+               AND EXTRACT(DAY FROM e.FECHA_ESTADO) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)";
+        if ($filtroConductor !== '') {
+            $whereIncidenciasHoy .= " AND " . $filtroConductor;
+        }
 
         $resp['kpis']['incidencias_hoy'] = dashboardInt(
             $pdo,
@@ -508,23 +542,29 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
              FROM SN_GUIAS g
              INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID
              INNER JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID
-             WHERE g.ID_CONDUCTOR = ?
-               AND COALESCE(e.ESTADO_ENTREGA, '') IN ('NO_ENTREGADO', 'ENTREGA_PARCIAL')
-               AND EXTRACT(YEAR FROM e.FECHA_ESTADO) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
-               AND EXTRACT(MONTH FROM e.FECHA_ESTADO) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
-               AND EXTRACT(DAY FROM e.FECHA_ESTADO) = EXTRACT(DAY FROM CURRENT_TIMESTAMP)",
-            array($terid)
+             WHERE " . $whereIncidenciasHoy,
+            $paramsConductor
         );
     } else {
+        $whereBasePendSinEstado = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'";
+        if ($filtroConductor !== '') {
+            $whereBasePendSinEstado .= " AND " . $filtroConductor;
+        }
+
+        $whereBaseGeneralSinEstado = "1 = 1";
+        if ($filtroConductor !== '') {
+            $whereBaseGeneralSinEstado .= " AND " . $filtroConductor;
+        }
+
         $resp['kpis']['remisiones_pendientes'] = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID WHERE g.ID_CONDUCTOR = ? AND UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID WHERE " . $whereBasePendSinEstado,
+            $paramsConductor
         );
         $cntPend = dashboardInt(
             $pdo,
-            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID WHERE g.ID_CONDUCTOR = ?",
-            array($terid)
+            "SELECT COUNT(*) FROM SN_GUIAS g INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID WHERE " . $whereBaseGeneralSinEstado,
+            $paramsConductor
         );
     }
 
@@ -533,29 +573,38 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
         'values' => array((int)$cntPend, (int)$cntEnt, (int)$cntNoEnt, (int)$cntPar)
     );
 
+    $whereGuiasMes = "EXTRACT(YEAR FROM g.FECHA_GUIA) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+           AND EXTRACT(MONTH FROM g.FECHA_GUIA) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)";
+    if ($filtroConductor !== '') {
+        $whereGuiasMes .= " AND " . $filtroConductor;
+    }
+
     $rowsGuias = dashboardRows(
         $pdo,
         "SELECT FIRST 8 (TRIM(g.PREFIJO) || '-' || CAST(g.CONSECUTIVO AS VARCHAR(15))) AS NUM_GUIA, COUNT(*) AS TOTAL
          FROM SN_GUIAS g
          INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID
-         WHERE g.ID_CONDUCTOR = ?
-           AND EXTRACT(YEAR FROM g.FECHA_GUIA) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
-           AND EXTRACT(MONTH FROM g.FECHA_GUIA) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
+         WHERE " . $whereGuiasMes . "
          GROUP BY 1
          ORDER BY 2 DESC",
-        array($terid)
+        $paramsConductor
     );
 
     if (empty($rowsGuias)) {
+        $whereGuiasHistorico = "1 = 1";
+        if ($filtroConductor !== '') {
+            $whereGuiasHistorico .= " AND " . $filtroConductor;
+        }
+
         $rowsGuias = dashboardRows(
             $pdo,
             "SELECT FIRST 8 (TRIM(g.PREFIJO) || '-' || CAST(g.CONSECUTIVO AS VARCHAR(15))) AS NUM_GUIA, COUNT(*) AS TOTAL
              FROM SN_GUIAS g
              INNER JOIN SN_GUIAS_DETALLE d ON d.ID_GUIA = g.ID
-             WHERE g.ID_CONDUCTOR = ?
+             WHERE " . $whereGuiasHistorico . "
              GROUP BY 1
              ORDER BY 2 DESC",
-            array($terid)
+            $paramsConductor
         );
     }
 
