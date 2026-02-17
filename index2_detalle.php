@@ -12,11 +12,11 @@ require("conecta.php");
 $bd               = '';
 $ip               = '127.0.0.1';
 $varchivo         = "bd_admin.txt";
-$varchivopj       = "f:/facilweb_fe73_32/htdocs/evento_inventario/prefijos.txt";
+$varchivopj       = __DIR__ . "/prefijos.txt";
 $vprefijos        = "";
-$vbd_actual       = "f:/facilweb_fe73_32/htdocs/evento_inventario/bd_actual.txt";
-$vbd_anterior     = "f:/facilweb_fe73_32/htdocs/evento_inventario/bd_anterior.txt";
-$vbd_inventarios  = "f:/facilweb_fe73_32/htdocs/evento_inventario/bd_inventarios.txt";
+$vbd_actual       = __DIR__ . "/bd_actual.txt";
+$vbd_anterior     = __DIR__ . "/bd_anterior.txt";
+$vbd_inventarios  = __DIR__ . "/bd_inventarios.txt";
 ?>
 
 <html lang="en" dir="ltr">
@@ -34,7 +34,7 @@ if(file_exists($vbd_actual))
 	$fp = fopen($vbd_actual, "r");
 	while (!feof($fp))
 	{
-		$vbd_actual = addslashes(fgets($fp));
+		$vbd_actual = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 
@@ -58,7 +58,7 @@ if(file_exists($vbd_anterior))
 	$fp = fopen($vbd_anterior, "r");
 	while (!feof($fp))
 	{
-		$vbd_anterior = addslashes(fgets($fp));
+		$vbd_anterior = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 
@@ -82,7 +82,7 @@ if(file_exists($vbd_inventarios))
 	$fp = fopen($vbd_inventarios, "r");
 	while (!feof($fp))
 	{
-		$vbd_inventarios = addslashes(fgets($fp));
+		$vbd_inventarios = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 

@@ -3,8 +3,8 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-include_once 'f:/facilweb_fe73_32/htdocs/evento_inventario/php/baseDeDatos.php';
-include_once 'f:/facilweb_fe73_32/htdocs/evento_inventario/php/importarExcel.php';
+include_once __DIR__ . '/../baseDeDatos.php';
+include_once __DIR__ . '/../importarExcel.php';
 
 //******************************************************************************************************************
 $bd           = '';
@@ -18,7 +18,7 @@ $vbd_inventarios = "";
 
 $drives = range('A', 'Z');
 foreach ($drives as $drive) {
-	$path = $drive . ":/facilweb_fe73_32/htdocs/evento_inventario/";
+	$path = $drive . ":/facilweb/htdocs/evento_inventario/";
 	if (file_exists($path . "prefijos.txt")) {
 		$varchivopj = $path . "prefijos.txt";
 		break;
@@ -26,7 +26,7 @@ foreach ($drives as $drive) {
 }
 
 foreach ($drives as $drive) {
-	$path = $drive . ":/facilweb_fe73_32/htdocs/evento_inventario/";
+	$path = $drive . ":/facilweb/htdocs/evento_inventario/";
 	if (file_exists($path . "bd_actual_produccion.txt")) {
 		$vbd_actual = $path . "bd_actual_produccion.txt";
 		break;
@@ -34,7 +34,7 @@ foreach ($drives as $drive) {
 }
 
 foreach ($drives as $drive) {
-	$path = $drive . ":/facilweb_fe73_32/htdocs/evento_inventario/";
+	$path = $drive . ":/facilweb/htdocs/evento_inventario/";
 	if (file_exists($path . "bd_anterior.txt")) {
 		$vbd_anterior = $path . "bd_anterior.txt";
 		break;
@@ -42,7 +42,7 @@ foreach ($drives as $drive) {
 }
 
 foreach ($drives as $drive) {
-	$path = $drive . ":/facilweb_fe73_32/htdocs/evento_inventario/";
+	$path = $drive . ":/facilweb/htdocs/evento_inventario/";
 	if (file_exists($path . "bd_inventarios.txt")) {
 		$vbd_inventarios = $path . "bd_inventarios.txt";
 		break;
@@ -54,7 +54,7 @@ if(file_exists($vbd_actual))
 {
 	$fp = fopen($vbd_actual, "r");
 	while (!feof($fp)){
-		$vbd_actual = addslashes(fgets($fp));
+		$vbd_actual = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 	
@@ -77,7 +77,7 @@ if(file_exists($vbd_anterior))
 {
 	$fp = fopen($vbd_anterior, "r");
 	while (!feof($fp)){
-		$vbd_anterior = addslashes(fgets($fp));
+		$vbd_anterior = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 	
@@ -100,7 +100,7 @@ if(file_exists($vbd_inventarios))
 {
 	$fp = fopen($vbd_inventarios, "r");
 	while (!feof($fp)){
-		$vbd_inventarios = addslashes(fgets($fp));
+		$vbd_inventarios = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 	

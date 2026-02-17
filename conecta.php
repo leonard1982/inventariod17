@@ -42,13 +42,65 @@ function leerArchivo($nombreArchivo) {
     return $contenido;
 }
 
+// Resuelve rutas de BD sin unidad (ej: :\DATOS TNS\archivo.GDB)
+function resolverRutaBaseDatos($rutaCruda) {
+    $ruta = trim($rutaCruda);
+
+    if ($ruta === '') {
+        return '';
+    }
+
+    // Ruta completa con unidad (ej: C:\ o C:/)
+    if (preg_match('/^[A-Za-z]:[\\\\\\/]/', $ruta)) {
+        return $ruta;
+    }
+
+    // Ruta sin unidad (ej: :\DATOS TNS\...)
+    if (preg_match('/^:[\\\\\\/]/', $ruta)) {
+        $sufijoRuta = substr($ruta, 1);
+
+        // 1) Probar la misma unidad donde está el proyecto
+        if (preg_match('/^([A-Za-z]):/', __DIR__, $matches)) {
+            $unidadProyecto = strtoupper($matches[1]) . ':';
+            $candidata = $unidadProyecto . $sufijoRuta;
+            if (file_exists($candidata)) {
+                return $candidata;
+            }
+        }
+
+        // 2) Buscar en otras unidades
+        foreach (range('A', 'Z') as $unidad) {
+            $candidata = $unidad . ':' . $sufijoRuta;
+            if (file_exists($candidata)) {
+                return $candidata;
+            }
+        }
+    }
+
+    return $ruta;
+}
+
 // Función para buscar un archivo en diferentes unidades
 function buscarArchivo($nombreArchivo) {
+    // 1) Buscar primero en la carpeta real del proyecto (donde vive conecta.php)
+    $localPath = __DIR__ . DIRECTORY_SEPARATOR . $nombreArchivo;
+    if (file_exists($localPath)) {
+        return $localPath;
+    }
+
+    // 2) Compatibilidad con instalaciones heredadas en diferentes unidades
+    $rutasProyecto = array(
+        "/facilweb/htdocs/evento_inventario/",
+        "/facilweb_fe73_32/htdocs/evento_inventario/"
+    );
+
     $drives = range('A', 'Z');
     foreach ($drives as $drive) {
-        $path = $drive . ":/facilweb_fe73_32/htdocs/evento_inventario/";
-        if (file_exists($path . $nombreArchivo)) {
-            return $path . $nombreArchivo;
+        foreach ($rutasProyecto as $rutaProyecto) {
+            $path = $drive . ":" . $rutaProyecto;
+            if (file_exists($path . $nombreArchivo)) {
+                return $path . $nombreArchivo;
+            }
         }
     }
     return '';
@@ -62,30 +114,35 @@ $vbd_inventarios = buscarArchivo("bd_inventarios.txt");
 
 // Leer el contenido de los archivos
 $contenidoPrefijos = leerArchivo($varchivopj);
-$contenidoBdActual = leerArchivo($vbd_actual);
-$contenidoBdAnterior = leerArchivo($vbd_anterior);
-$contenidoBdInventarios = leerArchivo($vbd_inventarios);
+$contenidoBdActual = resolverRutaBaseDatos(leerArchivo($vbd_actual));
+$contenidoBdAnterior = resolverRutaBaseDatos(leerArchivo($vbd_anterior));
+$contenidoBdInventarios = resolverRutaBaseDatos(leerArchivo($vbd_inventarios));
 
 // Validar bases de datos
-function validarBaseDatos($rutaArchivo, $nombreBase) {
+function validarBaseDatos($rutaArchivo, $nombreBase, $mostrarError = true) {
     if (file_exists($rutaArchivo)) {
-        $fp = fopen($rutaArchivo, "r");
-        while (!feof($fp)) {
-            $rutaArchivo = addslashes(fgets($fp));
-        }
-        fclose($fp);
+        $rutaConfigurada = leerArchivo($rutaArchivo);
+        $rutaBaseDatos = resolverRutaBaseDatos($rutaConfigurada);
 
-        if (!file_exists($rutaArchivo)) {
-            echo "NO SE ENCUENTRA LA BASE DE DATOS $nombreBase -- ";
+        if (empty($rutaBaseDatos) || !file_exists($rutaBaseDatos)) {
+            if ($mostrarError) {
+                echo "NO SE ENCUENTRA LA BASE DE DATOS $nombreBase -- ";
+            }
+            return false;
         }
     } else {
-        echo "NO SE ENCUENTRA EL ARCHIVO DE CONFIGURACION DE LA BASE $nombreBase -- ";
+        if ($mostrarError) {
+            echo "NO SE ENCUENTRA EL ARCHIVO DE CONFIGURACION DE LA BASE $nombreBase -- ";
+        }
+        return false;
     }
+
+    return true;
 }
 
-validarBaseDatos($vbd_actual, "ACTUAL");
-validarBaseDatos($vbd_anterior, "ANTERIOR");
-validarBaseDatos($vbd_inventarios, "DE INVENTARIOS");
+$bdActualDisponible = validarBaseDatos($vbd_actual, "ACTUAL", true);
+$bdAnteriorDisponible = validarBaseDatos($vbd_anterior, "ANTERIOR", false);
+$bdInventariosDisponible = validarBaseDatos($vbd_inventarios, "DE INVENTARIOS", false);
 
 // Validar archivo de prefijos
 if (file_exists($varchivopj)) {
@@ -102,11 +159,33 @@ if (file_exists($varchivopj)) {
     echo "NO SE ENCUENTRA EL ARCHIVO DE CONFIGURACIÓN DE PREFIJOS -- ";
 }
 
+if (empty($contenidoBdActual)) {
+    exit;
+}
+
 // Hacer conexión a bases de datos
-$conect_bd_anterior = new dbFirebird($ip, $contenidoBdAnterior);
+$conect_bd_anterior = null;
+$conect_bd_actual = null;
+$conect_bd_actualPDO = null;
+$conect_bd_inventario = null;
+
+// La BD actual es obligatoria para autenticación y operación principal
+if (!$bdActualDisponible || !file_exists($contenidoBdActual)) {
+    echo "NO SE ENCUENTRA LA BASE DE DATOS ACTUAL -- ";
+    exit;
+}
+
 $conect_bd_actual = new dbFirebird($ip, $contenidoBdActual);
 $conect_bd_actualPDO = new dbFirebirdPDO($ip, $contenidoBdActual);
-$conect_bd_inventario = new dbFirebird($ip, $contenidoBdInventarios);
+
+// Conexiones auxiliares: se crean solo si la ruta existe
+if ($bdAnteriorDisponible && !empty($contenidoBdAnterior) && file_exists($contenidoBdAnterior)) {
+    $conect_bd_anterior = new dbFirebird($ip, $contenidoBdAnterior);
+}
+
+if ($bdInventariosDisponible && !empty($contenidoBdInventarios) && file_exists($contenidoBdInventarios)) {
+    $conect_bd_inventario = new dbFirebird($ip, $contenidoBdInventarios);
+}
 
 // Función para generar opciones de un select a partir de una consulta SQL
 function generarOpcionesSelect($conexion, $sql, $valueField, $textField) {

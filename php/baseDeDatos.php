@@ -22,6 +22,54 @@ function checkPuerto($dominio,$puerto){
      
 }
 
+function resolverRutaFirebird($rutaCruda){
+
+    $ruta = trim((string)$rutaCruda, " \t\n\r\0\x0B\"'");
+
+    if ($ruta === '') {
+        return '';
+    }
+
+    // Normaliza separadores para Windows cuando vienen mezclados o duplicados
+    if (preg_match('/^([A-Za-z]:|:)([\\\\\\/].*)$/', $ruta, $matches)) {
+        $prefijo = $matches[1];
+        $sufijo  = preg_replace('/[\\\\\\/]+/', '\\\\', $matches[2]);
+        $ruta    = $prefijo . $sufijo;
+    }
+
+    // Ruta completa con unidad
+    if (preg_match('/^[A-Za-z]:[\\\\\\/]/', $ruta)) {
+        return $ruta;
+    }
+
+    // Ruta sin unidad, por ejemplo :\DATOS TNS\...
+    if (preg_match('/^:[\\\\\\/]/', $ruta)) {
+        $sufijoRuta = substr($ruta, 1);
+        $unidadProyecto = '';
+
+        if (preg_match('/^([A-Za-z]):/', __DIR__, $matches)) {
+            $unidadProyecto = strtoupper($matches[1]) . ':';
+            $candidata = $unidadProyecto . $sufijoRuta;
+            if (file_exists($candidata)) {
+                return $candidata;
+            }
+        }
+
+        foreach (range('A', 'Z') as $unidad) {
+            $candidata = $unidad . ':' . $sufijoRuta;
+            if (file_exists($candidata)) {
+                return $candidata;
+            }
+        }
+
+        if ($unidadProyecto !== '') {
+            return $unidadProyecto . $sufijoRuta;
+        }
+    }
+
+    return $ruta;
+}
+
 class dbMysql{
 
 	private $conexion;
@@ -65,8 +113,8 @@ class dbFirebirdPDO{
 	public function __construct($servidor,$db){
 
 		$this->servidor = $servidor;
-		$this->db       = $db;
-		$this->conexion = new PDO("firebird:dbname=".$this->servidor.":".$db, "SYSDBA", "masterkey");
+		$this->db       = resolverRutaFirebird($db);
+		$this->conexion = new PDO("firebird:dbname=".$this->servidor.":".$this->db, "SYSDBA", "masterkey");
 	}
 	
 	public function consulta($sql){
@@ -152,7 +200,7 @@ class dbFirebird {
         $this->servidor = $ip;
         $this->usuario  = "SYSDBA";
         $this->password = "masterkey";
-        $this->ruta     = $ruta;
+        $this->ruta     = resolverRutaFirebird($ruta);
 
         $this->conexion = ibase_connect($this->servidor . ":" . $this->ruta, $this->usuario, $this->password);
     }

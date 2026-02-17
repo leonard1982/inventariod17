@@ -10,7 +10,7 @@ if(file_exists($varchivo))
 {
 	$fp = fopen($varchivo, "r");
 	while (!feof($fp)){
-		$bd = addslashes(fgets($fp));
+		$bd = resolverRutaFirebird(fgets($fp));
 	}
 	fclose($fp);
 	

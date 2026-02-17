@@ -19,7 +19,7 @@ session_start();
 	$v_fechabusqueda=date("Y-m-d",strtotime($v_year.'-'.$v_mes.'-'.'01'));
 	
 	$ip           = '127.0.0.1';
-	$vbd_inventarios = "f:/facilweb_fe73_32/htdocs/evento_inventario/bd_inventarios.txt";
+	$vbd_inventarios = __DIR__ . "/bd_inventarios.txt";
 
 	require("tns/conexion.php");
 	require("conecta.php");
