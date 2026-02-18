@@ -127,17 +127,135 @@ function validarTablasModulo(PDO $pdo) {
     return $faltantes;
 }
 
-function normalizarFechaInput($fecha) {
+function normalizarFechaInput($fecha, $esHasta = false) {
     $valor = trim((string)$fecha);
     if ($valor === '') {
         return null;
     }
 
     $valor = str_replace('T', ' ', $valor);
-    if (strlen($valor) === 16) {
-        $valor .= ':00';
+
+    // datetime-local (YYYY-MM-DD HH:MM) viene sin segundos.
+    // Para "hasta" usamos :59 para no excluir registros del mismo minuto.
+    if (preg_match('/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/', $valor)) {
+        $valor .= $esHasta ? ':59' : ':00';
+        return $valor;
     }
+
+    // Si solo llega fecha (YYYY-MM-DD), expandimos al inicio/fin del dia.
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor)) {
+        $valor .= $esHasta ? ' 23:59:59' : ' 00:00:00';
+    }
+
     return $valor;
+}
+
+function estadoNormalizado($estado) {
+    $e = strtoupper(trim((string)$estado));
+    if ($e === 'FINALIZADO') {
+        return 'ENTREGADO';
+    }
+    return $e;
+}
+
+function estadoPresentacion($estado) {
+    return estadoNormalizado($estado);
+}
+
+function catalogoEstadosDefecto() {
+    return array(
+        array(
+            'ID' => 0,
+            'CODIGO' => 'EN_ALISTAMIENTO',
+            'NOMBRE' => 'EN ALISTAMIENTO',
+            'ACTIVO' => 'S',
+            'ORDEN_VISUAL' => 10
+        ),
+        array(
+            'ID' => 0,
+            'CODIGO' => 'EN_RUTA',
+            'NOMBRE' => 'EN RUTA',
+            'ACTIVO' => 'S',
+            'ORDEN_VISUAL' => 20
+        ),
+        array(
+            'ID' => 0,
+            'CODIGO' => 'ENTREGADO',
+            'NOMBRE' => 'ENTREGADO',
+            'ACTIVO' => 'S',
+            'ORDEN_VISUAL' => 30
+        )
+    );
+}
+
+function existeTablaCatalogoEstados(PDO $pdo) {
+    return tablaExiste($pdo, 'SN_GUIAS_ESTADOS_CFG')
+        && columnaExiste($pdo, 'SN_GUIAS_ESTADOS_CFG', 'CODIGO')
+        && columnaExiste($pdo, 'SN_GUIAS_ESTADOS_CFG', 'NOMBRE')
+        && columnaExiste($pdo, 'SN_GUIAS_ESTADOS_CFG', 'ACTIVO');
+}
+
+function obtenerCatalogoEstados(PDO $pdo, $soloActivos = true) {
+    if (!existeTablaCatalogoEstados($pdo)) {
+        return catalogoEstadosDefecto();
+    }
+
+    $sql = "
+        SELECT
+            ID,
+            UPPER(TRIM(CODIGO)) AS CODIGO,
+            TRIM(NOMBRE) AS NOMBRE,
+            COALESCE(ACTIVO, 'S') AS ACTIVO,
+            COALESCE(ORDEN_VISUAL, 0) AS ORDEN_VISUAL
+        FROM SN_GUIAS_ESTADOS_CFG
+    ";
+
+    if ($soloActivos) {
+        $sql .= " WHERE COALESCE(ACTIVO, 'S') = 'S'";
+    }
+
+    $sql .= " ORDER BY COALESCE(ORDEN_VISUAL, 0), UPPER(TRIM(CODIGO))";
+
+    $stmt = $pdo->query($sql);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!empty($rows)) {
+        return $rows;
+    }
+
+    return catalogoEstadosDefecto();
+}
+
+function obtenerEstadoInicialGuia(PDO $pdo) {
+    $catalogo = obtenerCatalogoEstados($pdo, true);
+    foreach ($catalogo as $row) {
+        $codigo = estadoNormalizado(isset($row['CODIGO']) ? $row['CODIGO'] : '');
+        if ($codigo === 'EN_ALISTAMIENTO') {
+            return $codigo;
+        }
+    }
+    if (!empty($catalogo)) {
+        return estadoNormalizado($catalogo[0]['CODIGO']);
+    }
+    return 'EN_ALISTAMIENTO';
+}
+
+function estadoEstaEnUso(PDO $pdo, $codigoEstado) {
+    $codigo = estadoNormalizado($codigoEstado);
+    if ($codigo === '') {
+        return false;
+    }
+
+    $sql1 = "SELECT COUNT(*) FROM SN_GUIAS WHERE UPPER(TRIM(COALESCE(ESTADO_ACTUAL, ''))) = ?";
+    $stmt1 = $pdo->prepare($sql1);
+    $stmt1->execute(array($codigo));
+    if ((int)$stmt1->fetchColumn() > 0) {
+        return true;
+    }
+
+    $sql2 = "SELECT COUNT(*) FROM SN_GUIAS_ESTADOS WHERE UPPER(TRIM(COALESCE(ESTADO, ''))) = ?";
+    $stmt2 = $pdo->prepare($sql2);
+    $stmt2->execute(array($codigo));
+    return ((int)$stmt2->fetchColumn()) > 0;
 }
 
 function siguienteId(PDO $pdo, $tabla) {
@@ -157,6 +275,23 @@ function esErrorConcurrencia(PDOException $e) {
         return true;
     }
     if (strpos($msg, 'lock conflict on no wait transaction') !== false) {
+        return true;
+    }
+    return false;
+}
+
+function esErrorCheckEstadoLegacy(PDOException $e) {
+    $msg = strtoupper((string)$e->getMessage());
+    if (strpos($msg, 'CK_SN_GUIAS_ESTADO') !== false) {
+        return true;
+    }
+    if (strpos($msg, 'CK_SN_GUIAS_ESTADO_H') !== false) {
+        return true;
+    }
+    if (strpos($msg, 'CHECK_297') !== false) {
+        return true;
+    }
+    if (strpos($msg, 'VIOLATES CHECK CONSTRAINT') !== false && strpos($msg, 'SN_GUIAS') !== false) {
         return true;
     }
     return false;
@@ -198,6 +333,10 @@ function construirFechaHoraTexto($fecha, $hora) {
     return $f . ' ' . $h;
 }
 
+function tokenRemisionEntrega($kardexId) {
+    return strtoupper(substr(sha1('D17_REMISION_' . (int)$kardexId . '_2026'), 0, 12));
+}
+
 function numeroDesdeFirebird($valor) {
     if ($valor === null) {
         return 0.0;
@@ -230,6 +369,20 @@ function numeroDesdeFirebird($valor) {
     return is_numeric($txt) ? (float)$txt : 0.0;
 }
 
+function sqlPesoRemision($exprKardexId) {
+    return "
+        COALESCE(
+            (
+                SELECT SUM(COALESCE(dk.CANMAT, dk.CANLISTA, 0) * COALESCE(m.PESO, 0))
+                FROM DEKARDEX dk
+                LEFT JOIN MATERIAL m ON m.MATID = dk.MATID
+                WHERE dk.KARDEXID = " . $exprKardexId . "
+            ),
+            0
+        )
+    ";
+}
+
 try {
     $pdo = obtenerPdoActual();
     $action = isset($_POST['action']) ? trim((string)$_POST['action']) : '';
@@ -251,10 +404,164 @@ try {
         ));
     }
 
+    $usaVehiculo = columnaExiste($pdo, 'SN_GUIAS', 'ID_VEHICULO') && tablaExiste($pdo, 'VEHICULO');
+    $usaZonas = tablaExiste($pdo, 'ZONAS')
+        && columnaExiste($pdo, 'ZONAS', 'ZONAID')
+        && columnaExiste($pdo, 'ZONAS', 'NOMBRE')
+        && columnaExiste($pdo, 'TERCEROS', 'ZONA1')
+        && columnaExiste($pdo, 'TERCEROS', 'ZONA2');
+    $usaZonaTextoTercero = columnaExiste($pdo, 'TERCEROS', 'ZONA');
+
+    if ($action === 'listar_estados_catalogo') {
+        $soloActivos = strtoupper(trim((string)(isset($_POST['solo_activos']) ? $_POST['solo_activos'] : 'S'))) !== 'N';
+        $catalogo = obtenerCatalogoEstados($pdo, $soloActivos);
+        $data = array();
+
+        foreach ($catalogo as $row) {
+            $codigo = estadoNormalizado(isset($row['CODIGO']) ? $row['CODIGO'] : '');
+            $data[] = array(
+                'id' => isset($row['ID']) ? (int)$row['ID'] : 0,
+                'codigo' => $codigo,
+                'nombre' => trim((string)(isset($row['NOMBRE']) ? $row['NOMBRE'] : $codigo)),
+                'activo' => strtoupper(trim((string)(isset($row['ACTIVO']) ? $row['ACTIVO'] : 'S'))) === 'N' ? 'N' : 'S',
+                'orden_visual' => isset($row['ORDEN_VISUAL']) ? (int)$row['ORDEN_VISUAL'] : 0,
+                'en_uso' => estadoEstaEnUso($pdo, $codigo) ? 1 : 0
+            );
+        }
+
+        responder(true, array(
+            'usa_catalogo_db' => existeTablaCatalogoEstados($pdo) ? 1 : 0,
+            'data' => $data
+        ));
+    }
+
+    if ($action === 'agregar_estado_catalogo') {
+        if (!existeTablaCatalogoEstados($pdo)) {
+            responder(false, array('message' => 'No existe SN_GUIAS_ESTADOS_CFG. Ejecuta 04_create_estados_guias_y_vehiculo.sql.'));
+        }
+
+        $codigo = estadoNormalizado(isset($_POST['codigo']) ? $_POST['codigo'] : '');
+        $nombre = strtoupper(trim((string)(isset($_POST['nombre']) ? $_POST['nombre'] : '')));
+        $orden = isset($_POST['orden_visual']) ? (int)$_POST['orden_visual'] : 0;
+        $usuario = isset($_SESSION['user']) ? trim((string)$_SESSION['user']) : 'sistema';
+
+        if ($codigo === '' || strlen($codigo) > 30) {
+            responder(false, array('message' => 'Codigo de estado invalido (maximo 30).'));
+        }
+        if ($nombre === '') {
+            $nombre = str_replace('_', ' ', $codigo);
+        }
+        if (strlen($nombre) > 60) {
+            $nombre = substr($nombre, 0, 60);
+        }
+        if (strlen($usuario) > 25) {
+            $usuario = substr($usuario, 0, 25);
+        }
+
+        $stmtEx = $pdo->prepare("SELECT COUNT(*) FROM SN_GUIAS_ESTADOS_CFG WHERE UPPER(TRIM(CODIGO)) = ?");
+        $stmtEx->execute(array($codigo));
+        if ((int)$stmtEx->fetchColumn() > 0) {
+            responder(false, array('message' => 'El codigo ya existe en el catalogo.'));
+        }
+
+        $id = siguienteId($pdo, 'SN_GUIAS_ESTADOS_CFG');
+        $sql = "
+            INSERT INTO SN_GUIAS_ESTADOS_CFG (
+                ID, CODIGO, NOMBRE, ACTIVO, ORDEN_VISUAL, FECHA_CREACION, FECHA_EDICION, USUARIO_EDITA
+            ) VALUES (?, ?, ?, 'S', ?, CURRENT_TIMESTAMP, NULL, ?)
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array($id, $codigo, $nombre, $orden, $usuario));
+        responder(true, array('message' => 'Estado agregado.'));
+    }
+
+    if ($action === 'editar_estado_catalogo') {
+        if (!existeTablaCatalogoEstados($pdo)) {
+            responder(false, array('message' => 'No existe SN_GUIAS_ESTADOS_CFG. Ejecuta 04_create_estados_guias_y_vehiculo.sql.'));
+        }
+
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $codigo = estadoNormalizado(isset($_POST['codigo']) ? $_POST['codigo'] : '');
+        $nombre = strtoupper(trim((string)(isset($_POST['nombre']) ? $_POST['nombre'] : '')));
+        $activo = strtoupper(trim((string)(isset($_POST['activo']) ? $_POST['activo'] : 'S'))) === 'N' ? 'N' : 'S';
+        $orden = isset($_POST['orden_visual']) ? (int)$_POST['orden_visual'] : 0;
+        $usuario = isset($_SESSION['user']) ? trim((string)$_SESSION['user']) : 'sistema';
+
+        if ($id <= 0) {
+            responder(false, array('message' => 'ID de estado invalido.'));
+        }
+        if ($codigo === '' || strlen($codigo) > 30) {
+            responder(false, array('message' => 'Codigo de estado invalido (maximo 30).'));
+        }
+        if ($nombre === '') {
+            $nombre = str_replace('_', ' ', $codigo);
+        }
+        if (strlen($nombre) > 60) {
+            $nombre = substr($nombre, 0, 60);
+        }
+        if (strlen($usuario) > 25) {
+            $usuario = substr($usuario, 0, 25);
+        }
+
+        $stmtAct = $pdo->prepare("SELECT CODIGO FROM SN_GUIAS_ESTADOS_CFG WHERE ID = ?");
+        $stmtAct->execute(array($id));
+        $codigoActual = $stmtAct->fetchColumn();
+        if ($codigoActual === false) {
+            responder(false, array('message' => 'El estado no existe.'));
+        }
+
+        $codigoActual = estadoNormalizado($codigoActual);
+        if (estadoEstaEnUso($pdo, $codigoActual)) {
+            responder(false, array('message' => 'No se puede editar un estado que ya esta en uso.'));
+        }
+
+        $stmtEx = $pdo->prepare("SELECT COUNT(*) FROM SN_GUIAS_ESTADOS_CFG WHERE UPPER(TRIM(CODIGO)) = ? AND ID <> ?");
+        $stmtEx->execute(array($codigo, $id));
+        if ((int)$stmtEx->fetchColumn() > 0) {
+            responder(false, array('message' => 'Ya existe otro estado con ese codigo.'));
+        }
+
+        $sql = "
+            UPDATE SN_GUIAS_ESTADOS_CFG
+            SET CODIGO = ?, NOMBRE = ?, ACTIVO = ?, ORDEN_VISUAL = ?, FECHA_EDICION = CURRENT_TIMESTAMP, USUARIO_EDITA = ?
+            WHERE ID = ?
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array($codigo, $nombre, $activo, $orden, $usuario, $id));
+        responder(true, array('message' => 'Estado actualizado.'));
+    }
+
+    if ($action === 'eliminar_estado_catalogo') {
+        if (!existeTablaCatalogoEstados($pdo)) {
+            responder(false, array('message' => 'No existe SN_GUIAS_ESTADOS_CFG. Ejecuta 04_create_estados_guias_y_vehiculo.sql.'));
+        }
+
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) {
+            responder(false, array('message' => 'ID de estado invalido.'));
+        }
+
+        $stmtAct = $pdo->prepare("SELECT CODIGO FROM SN_GUIAS_ESTADOS_CFG WHERE ID = ?");
+        $stmtAct->execute(array($id));
+        $codigoActual = $stmtAct->fetchColumn();
+        if ($codigoActual === false) {
+            responder(false, array('message' => 'El estado no existe.'));
+        }
+
+        $codigoActual = estadoNormalizado($codigoActual);
+        if (estadoEstaEnUso($pdo, $codigoActual)) {
+            responder(false, array('message' => 'No se puede eliminar un estado que ya esta en uso.'));
+        }
+
+        $stmt = $pdo->prepare("DELETE FROM SN_GUIAS_ESTADOS_CFG WHERE ID = ?");
+        $stmt->execute(array($id));
+        responder(true, array('message' => 'Estado eliminado.'));
+    }
+
     if ($action === 'listar') {
-        $fechaDesde = normalizarFechaInput(isset($_POST['fecha_desde']) ? $_POST['fecha_desde'] : '');
-        $fechaHasta = normalizarFechaInput(isset($_POST['fecha_hasta']) ? $_POST['fecha_hasta'] : '');
-        $estado = strtoupper(trim((string)(isset($_POST['estado']) ? $_POST['estado'] : '')));
+        $fechaDesde = normalizarFechaInput(isset($_POST['fecha_desde']) ? $_POST['fecha_desde'] : '', false);
+        $fechaHasta = normalizarFechaInput(isset($_POST['fecha_hasta']) ? $_POST['fecha_hasta'] : '', true);
+        $estado = estadoNormalizado(isset($_POST['estado']) ? $_POST['estado'] : '');
         $busqueda = trim((string)(isset($_POST['busqueda']) ? $_POST['busqueda'] : ''));
 
         $where = array();
@@ -269,16 +576,28 @@ try {
             $params[] = $fechaHasta;
         }
         if ($estado !== '') {
-            $where[] = 'g.ESTADO_ACTUAL = ?';
-            $params[] = $estado;
+            if ($estado === 'ENTREGADO') {
+                $where[] = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) IN ('ENTREGADO', 'FINALIZADO')";
+            } else {
+                $where[] = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) = ?";
+                $params[] = $estado;
+            }
         }
         if ($busqueda !== '') {
-            $where[] = "(g.PREFIJO CONTAINING ? OR CAST(g.CONSECUTIVO AS VARCHAR(20)) CONTAINING ? OR CAST(g.PREFIJO || '-' || CAST(g.CONSECUTIVO AS VARCHAR(20)) AS VARCHAR(30)) CONTAINING ? OR COALESCE(tc.NOMBRE, '') CONTAINING ?)";
+            $where[] = "(
+                CAST(COALESCE(g.PREFIJO, '') AS VARCHAR(10)) CONTAINING ?
+                OR CAST(g.CONSECUTIVO AS VARCHAR(20)) CONTAINING ?
+                OR CAST(CAST(COALESCE(g.PREFIJO, '') AS VARCHAR(10)) || '-' || CAST(g.CONSECUTIVO AS VARCHAR(20)) AS VARCHAR(40)) CONTAINING ?
+                OR CAST(COALESCE(tc.NOMBRE, '') AS VARCHAR(120)) CONTAINING ?
+            )";
             $params[] = $busqueda;
             $params[] = $busqueda;
             $params[] = $busqueda;
             $params[] = $busqueda;
         }
+
+        $campoVehiculo = $usaVehiculo ? "COALESCE(v.PLACA, '') AS PLACA_VEHICULO," : "'' AS PLACA_VEHICULO,";
+        $joinVehiculo = $usaVehiculo ? "LEFT JOIN VEHICULO v ON v.VEHICULOID = g.ID_VEHICULO" : '';
 
         $sql = "
             SELECT
@@ -288,12 +607,20 @@ try {
                 g.FECHA_GUIA,
                 g.ESTADO_ACTUAL,
                 g.USUARIO_CREA,
-                COALESCE(tc.NOMBRE, '') AS CONDUCTOR,
+                $campoVehiculo
+                CAST(COALESCE(tc.NOMBRE, '') AS VARCHAR(120)) AS CONDUCTOR,
                 (SELECT COUNT(*) FROM SN_GUIAS_DETALLE d WHERE d.ID_GUIA = g.ID) AS TOTAL_REMISIONES,
-                CAST((SELECT COALESCE(SUM(d.PESO), 0) FROM SN_GUIAS_DETALLE d WHERE d.ID_GUIA = g.ID) AS CHAR(30)) AS TOTAL_PESO_TXT,
+                CAST((
+                    SELECT COALESCE(SUM(COALESCE(dk.CANMAT, dk.CANLISTA, 0) * COALESCE(m.PESO, 0)), 0)
+                    FROM SN_GUIAS_DETALLE d
+                    LEFT JOIN DEKARDEX dk ON dk.KARDEXID = d.KARDEX_ID
+                    LEFT JOIN MATERIAL m ON m.MATID = dk.MATID
+                    WHERE d.ID_GUIA = g.ID
+                ) AS CHAR(30)) AS TOTAL_PESO_TXT,
                 CAST((SELECT COALESCE(SUM(d.VALOR_BASE), 0) FROM SN_GUIAS_DETALLE d WHERE d.ID_GUIA = g.ID) AS CHAR(30)) AS TOTAL_VALOR_BASE_TXT
             FROM SN_GUIAS g
             LEFT JOIN TERCEROS tc ON tc.TERID = g.ID_CONDUCTOR
+            $joinVehiculo
         ";
 
         if (!empty($where)) {
@@ -312,9 +639,10 @@ try {
                 'prefijo' => trim((string)$row['PREFIJO']),
                 'consecutivo' => (int)$row['CONSECUTIVO'],
                 'fecha_guia' => $row['FECHA_GUIA'],
-                'estado_actual' => trim((string)$row['ESTADO_ACTUAL']),
+                'estado_actual' => estadoPresentacion($row['ESTADO_ACTUAL']),
                 'usuario_crea' => trim((string)$row['USUARIO_CREA']),
                 'conductor' => trim((string)$row['CONDUCTOR']),
+                'placa_vehiculo' => trim((string)$row['PLACA_VEHICULO']),
                 'total_remisiones' => (int)$row['TOTAL_REMISIONES'],
                 'total_peso' => numeroDesdeFirebird($row['TOTAL_PESO_TXT']),
                 'total_valor_base' => numeroDesdeFirebird($row['TOTAL_VALOR_BASE_TXT'])
@@ -326,21 +654,32 @@ try {
 
     if ($action === 'crear_guia') {
         $prefijo = strtoupper(substr(trim((string)(isset($_POST['prefijo']) ? $_POST['prefijo'] : '')), 0, 2));
-        $fechaGuia = normalizarFechaInput(isset($_POST['fecha_guia']) ? $_POST['fecha_guia'] : '');
         $idConductor = trim((string)(isset($_POST['id_conductor']) ? $_POST['id_conductor'] : ''));
+        $idVehiculo = trim((string)(isset($_POST['id_vehiculo']) ? $_POST['id_vehiculo'] : ''));
         $observacion = trim((string)(isset($_POST['observacion']) ? $_POST['observacion'] : ''));
         $usuario = isset($_SESSION['user']) ? trim((string)$_SESSION['user']) : 'sistema';
+        $estadoInicial = obtenerEstadoInicialGuia($pdo);
 
         if ($prefijo === '') {
             responder(false, array('message' => 'El prefijo es obligatorio.'));
-        }
-        if ($fechaGuia === null) {
-            responder(false, array('message' => 'La fecha de la guia es obligatoria.'));
         }
 
         $idConductorFinal = null;
         if ($idConductor !== '' && ctype_digit($idConductor)) {
             $idConductorFinal = (int)$idConductor;
+        }
+
+        $idVehiculoFinal = null;
+        if ($idVehiculo !== '' && ctype_digit($idVehiculo)) {
+            $idVehiculoFinal = (int)$idVehiculo;
+        }
+
+        if ($usaVehiculo && $idVehiculoFinal !== null) {
+            $stmtVeh = $pdo->prepare('SELECT COUNT(*) FROM VEHICULO WHERE VEHICULOID = ?');
+            $stmtVeh->execute(array($idVehiculoFinal));
+            if ((int)$stmtVeh->fetchColumn() === 0) {
+                responder(false, array('message' => 'El vehiculo seleccionado no existe.'));
+            }
         }
 
         if (strlen($usuario) > 50) {
@@ -364,29 +703,34 @@ try {
                 $sqlInsGuia = "
                     INSERT INTO SN_GUIAS (
                         ID, FECHA_CREACION, FECHA_EDICION, USUARIO_CREA, USUARIO_EDITA,
-                        PREFIJO, CONSECUTIVO, FECHA_GUIA, ID_CONDUCTOR, ESTADO_ACTUAL
-                    ) VALUES (?, CURRENT_TIMESTAMP, NULL, ?, NULL, ?, ?, ?, ?, 'EN_ALISTAMIENTO')
+                        PREFIJO, CONSECUTIVO, FECHA_GUIA, ID_CONDUCTOR, ESTADO_ACTUAL" . ($usaVehiculo ? ", ID_VEHICULO" : "") . "
+                    ) VALUES (?, CURRENT_TIMESTAMP, NULL, ?, NULL, ?, ?, CURRENT_TIMESTAMP, ?, ?" . ($usaVehiculo ? ", ?" : "") . ")
                 ";
                 $stmtInsGuia = $pdo->prepare($sqlInsGuia);
-                $stmtInsGuia->execute(array(
+                $paramsInsGuia = array(
                     $idGuia,
                     $usuario,
                     $prefijo,
                     $consecutivo,
-                    $fechaGuia,
-                    $idConductorFinal
-                ));
+                    $idConductorFinal,
+                    $estadoInicial
+                );
+                if ($usaVehiculo) {
+                    $paramsInsGuia[] = $idVehiculoFinal;
+                }
+                $stmtInsGuia->execute($paramsInsGuia);
 
                 $idEstado = siguienteId($pdo, 'SN_GUIAS_ESTADOS');
                 $sqlInsEstado = "
                     INSERT INTO SN_GUIAS_ESTADOS (
                         ID, ID_GUIA, ESTADO, FECHA_HORA_ESTADO, USUARIO, OBSERVACION
-                    ) VALUES (?, ?, 'EN_ALISTAMIENTO', CURRENT_TIMESTAMP, ?, ?)
+                    ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
                 ";
                 $stmtInsEstado = $pdo->prepare($sqlInsEstado);
                 $stmtInsEstado->execute(array(
                     $idEstado,
                     $idGuia,
+                    $estadoInicial,
                     $usuario,
                     ($observacion !== '' ? $observacion : null)
                 ));
@@ -426,6 +770,9 @@ try {
             responder(false, array('message' => 'ID de guia invalido.'));
         }
 
+        $campoVehiculo = $usaVehiculo ? "g.ID_VEHICULO, COALESCE(v.PLACA, '') AS PLACA_VEHICULO," : "NULL AS ID_VEHICULO, '' AS PLACA_VEHICULO,";
+        $joinVehiculo = $usaVehiculo ? "LEFT JOIN VEHICULO v ON v.VEHICULOID = g.ID_VEHICULO" : '';
+
         $sql = "
             SELECT
                 g.ID,
@@ -433,8 +780,10 @@ try {
                 g.CONSECUTIVO,
                 g.FECHA_GUIA,
                 g.ID_CONDUCTOR,
+                $campoVehiculo
                 g.ESTADO_ACTUAL
             FROM SN_GUIAS g
+            $joinVehiculo
             WHERE g.ID = ?
         ";
         $stmt = $pdo->prepare($sql);
@@ -452,27 +801,38 @@ try {
                 'consecutivo' => (int)$row['CONSECUTIVO'],
                 'fecha_guia' => $row['FECHA_GUIA'],
                 'id_conductor' => ($row['ID_CONDUCTOR'] !== null ? (int)$row['ID_CONDUCTOR'] : null),
-                'estado_actual' => trim((string)$row['ESTADO_ACTUAL'])
+                'id_vehiculo' => ($row['ID_VEHICULO'] !== null ? (int)$row['ID_VEHICULO'] : null),
+                'placa_vehiculo' => trim((string)$row['PLACA_VEHICULO']),
+                'estado_actual' => estadoPresentacion($row['ESTADO_ACTUAL'])
             )
         ));
     }
 
     if ($action === 'actualizar_guia') {
         $idGuia = isset($_POST['id_guia']) ? (int)$_POST['id_guia'] : 0;
-        $fechaGuia = normalizarFechaInput(isset($_POST['fecha_guia']) ? $_POST['fecha_guia'] : '');
         $idConductor = trim((string)(isset($_POST['id_conductor']) ? $_POST['id_conductor'] : ''));
+        $idVehiculo = trim((string)(isset($_POST['id_vehiculo']) ? $_POST['id_vehiculo'] : ''));
         $usuario = isset($_SESSION['user']) ? trim((string)$_SESSION['user']) : 'sistema';
 
         if ($idGuia <= 0) {
             responder(false, array('message' => 'ID de guia invalido.'));
         }
-        if ($fechaGuia === null) {
-            responder(false, array('message' => 'La fecha de la guia es obligatoria.'));
-        }
-
         $idConductorFinal = null;
         if ($idConductor !== '' && ctype_digit($idConductor)) {
             $idConductorFinal = (int)$idConductor;
+        }
+
+        $idVehiculoFinal = null;
+        if ($idVehiculo !== '' && ctype_digit($idVehiculo)) {
+            $idVehiculoFinal = (int)$idVehiculo;
+        }
+
+        if ($usaVehiculo && $idVehiculoFinal !== null) {
+            $stmtVeh = $pdo->prepare('SELECT COUNT(*) FROM VEHICULO WHERE VEHICULOID = ?');
+            $stmtVeh->execute(array($idVehiculoFinal));
+            if ((int)$stmtVeh->fetchColumn() === 0) {
+                responder(false, array('message' => 'El vehiculo seleccionado no existe.'));
+            }
         }
 
         if (strlen($usuario) > 50) {
@@ -490,13 +850,14 @@ try {
                 responder(false, array('message' => 'La guia no existe.'));
             }
 
-            $sqlUpd = "
-                UPDATE SN_GUIAS
-                SET FECHA_GUIA = ?, ID_CONDUCTOR = ?, FECHA_EDICION = CURRENT_TIMESTAMP, USUARIO_EDITA = ?
-                WHERE ID = ?
-            ";
+            $sqlUpd = "UPDATE SN_GUIAS SET ID_CONDUCTOR = ?, FECHA_EDICION = CURRENT_TIMESTAMP, USUARIO_EDITA = ?" . ($usaVehiculo ? ", ID_VEHICULO = ?" : "") . " WHERE ID = ?";
             $stmtUpd = $pdo->prepare($sqlUpd);
-            $stmtUpd->execute(array($fechaGuia, $idConductorFinal, $usuario, $idGuia));
+            $paramsUpd = array($idConductorFinal, $usuario);
+            if ($usaVehiculo) {
+                $paramsUpd[] = $idVehiculoFinal;
+            }
+            $paramsUpd[] = $idGuia;
+            $stmtUpd->execute($paramsUpd);
 
             $pdo->commit();
             responder(true, array('message' => 'Guia actualizada.'));
@@ -535,7 +896,7 @@ try {
             $data[] = array(
                 'id' => (int)$row['ID'],
                 'id_guia' => (int)$row['ID_GUIA'],
-                'estado' => trim((string)$row['ESTADO']),
+                'estado' => estadoPresentacion($row['ESTADO']),
                 'fecha_hora_estado' => $row['FECHA_HORA_ESTADO'],
                 'usuario' => trim((string)$row['USUARIO']),
                 'observacion' => trim((string)$row['OBSERVACION'])
@@ -547,16 +908,19 @@ try {
 
     if ($action === 'cambiar_estado') {
         $idGuia = isset($_POST['id_guia']) ? (int)$_POST['id_guia'] : 0;
-        $estado = strtoupper(trim((string)(isset($_POST['estado']) ? $_POST['estado'] : '')));
+        $estado = estadoNormalizado(isset($_POST['estado']) ? $_POST['estado'] : '');
         $observacion = trim((string)(isset($_POST['observacion']) ? $_POST['observacion'] : ''));
         $usuario = isset($_SESSION['user']) ? trim((string)$_SESSION['user']) : 'sistema';
-
-        $estadosValidos = array('EN_ALISTAMIENTO', 'EN_RUTA', 'FINALIZADO');
 
         if ($idGuia <= 0) {
             responder(false, array('message' => 'ID de guia invalido.'));
         }
-        if (!in_array($estado, $estadosValidos, true)) {
+        $catalogoEstados = obtenerCatalogoEstados($pdo, true);
+        $codigosValidos = array();
+        foreach ($catalogoEstados as $estadoCfg) {
+            $codigosValidos[] = estadoNormalizado(isset($estadoCfg['CODIGO']) ? $estadoCfg['CODIGO'] : '');
+        }
+        if (!in_array($estado, $codigosValidos, true)) {
             responder(false, array('message' => 'Estado no valido.'));
         }
 
@@ -578,20 +942,45 @@ try {
                 responder(false, array('message' => 'La guia no existe.'));
             }
 
+            $estadoPersistir = $estado;
             $sqlUpd = 'UPDATE SN_GUIAS SET ESTADO_ACTUAL = ?, FECHA_EDICION = CURRENT_TIMESTAMP, USUARIO_EDITA = ? WHERE ID = ?';
-            $stmtUpd = $pdo->prepare($sqlUpd);
-            $stmtUpd->execute(array($estado, $usuario, $idGuia));
-
-            $idEstado = siguienteId($pdo, 'SN_GUIAS_ESTADOS');
             $sqlIns = 'INSERT INTO SN_GUIAS_ESTADOS (ID, ID_GUIA, ESTADO, FECHA_HORA_ESTADO, USUARIO, OBSERVACION) VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)';
-            $stmtIns = $pdo->prepare($sqlIns);
-            $stmtIns->execute(array(
-                $idEstado,
-                $idGuia,
-                $estado,
-                $usuario,
-                ($observacion !== '' ? $observacion : null)
-            ));
+
+            $intentosEstado = array($estadoPersistir);
+            if ($estadoPersistir === 'ENTREGADO') {
+                $intentosEstado[] = 'FINALIZADO';
+            }
+
+            $actualizado = false;
+            foreach ($intentosEstado as $idxIntento => $estadoTry) {
+                try {
+                    $stmtUpd = $pdo->prepare($sqlUpd);
+                    $stmtUpd->execute(array($estadoTry, $usuario, $idGuia));
+
+                    $idEstado = siguienteId($pdo, 'SN_GUIAS_ESTADOS');
+                    $stmtIns = $pdo->prepare($sqlIns);
+                    $stmtIns->execute(array(
+                        $idEstado,
+                        $idGuia,
+                        $estadoTry,
+                        $usuario,
+                        ($observacion !== '' ? $observacion : null)
+                    ));
+
+                    $estadoPersistir = $estadoTry;
+                    $actualizado = true;
+                    break;
+                } catch (PDOException $eEstado) {
+                    $esUltimo = ($idxIntento === count($intentosEstado) - 1);
+                    if ($esUltimo || !esErrorCheckEstadoLegacy($eEstado)) {
+                        throw $eEstado;
+                    }
+                }
+            }
+
+            if (!$actualizado) {
+                throw new PDOException('No fue posible actualizar estado en SN_GUIAS.');
+            }
 
             $pdo->commit();
 
@@ -619,11 +1008,13 @@ try {
                 k.FECHA,
                 k.HORA,
                 COALESCE(tc.NOMBRE, '') AS CLIENTE,
-                CAST(COALESCE(d.PESO, 0) AS CHAR(30)) AS PESO_TXT,
+                COALESCE(ks.TELEF1, tc.TELEF1, tc.TELEF2, '') AS TELEFONO,
+                CAST(COALESCE((" . sqlPesoRemision('d.KARDEX_ID') . "), d.PESO, 0) AS CHAR(30)) AS PESO_TXT,
                 CAST(COALESCE(d.VALOR_BASE, 0) AS CHAR(30)) AS VALOR_BASE_TXT
             FROM SN_GUIAS_DETALLE d
             LEFT JOIN KARDEX k ON k.KARDEXID = d.KARDEX_ID
             LEFT JOIN TERCEROS tc ON tc.TERID = k.CLIENTE
+            LEFT JOIN KARDEXSELF ks ON ks.KARDEXID = d.KARDEX_ID
             WHERE d.ID_GUIA = ?
             ORDER BY d.ID DESC
         ";
@@ -639,8 +1030,10 @@ try {
                 'remision' => construirRemision($row['CODPREFIJO'], $row['NUMERO']),
                 'fecha_hora' => construirFechaHoraTexto($row['FECHA'], $row['HORA']),
                 'cliente' => textoSeguro($row['CLIENTE']),
+                'telefono' => textoSeguro($row['TELEFONO']),
                 'peso' => numeroDesdeFirebird($row['PESO_TXT']),
-                'valor_base' => numeroDesdeFirebird($row['VALOR_BASE_TXT'])
+                'valor_base' => numeroDesdeFirebird($row['VALOR_BASE_TXT']),
+                'token_pdf' => tokenRemisionEntrega((int)$row['KARDEX_ID'])
             );
         }
 
@@ -652,6 +1045,8 @@ try {
         $busqueda = trim((string)(isset($_POST['busqueda']) ? $_POST['busqueda'] : ''));
         $fechaDesde = trim((string)(isset($_POST['fecha_desde']) ? $_POST['fecha_desde'] : ''));
         $fechaHasta = trim((string)(isset($_POST['fecha_hasta']) ? $_POST['fecha_hasta'] : ''));
+        $prefijoFiltro = strtoupper(trim((string)(isset($_POST['prefijo']) ? $_POST['prefijo'] : '')));
+        $zonasJson = isset($_POST['zonas_json']) ? trim((string)$_POST['zonas_json']) : '[]';
 
         if ($idGuia <= 0) {
             responder(false, array('message' => 'ID de guia invalido.'));
@@ -659,6 +1054,18 @@ try {
 
         $where = array();
         $params = array();
+        $zonasSel = json_decode($zonasJson, true);
+        if (!is_array($zonasSel)) {
+            $zonasSel = array();
+        }
+        $zonasSelLimpio = array();
+        foreach ($zonasSel as $z) {
+            $zt = trim((string)$z);
+            if ($zt !== '') {
+                $zonasSelLimpio[$zt] = $zt;
+            }
+        }
+        $zonasSelLimpio = array_values($zonasSelLimpio);
 
         $where[] = "k.CODCOMP = 'RS'";
         $where[] = "k.FECASENTAD IS NOT NULL";
@@ -672,12 +1079,41 @@ try {
             $where[] = 'k.FECHA <= ?';
             $params[] = $fechaHasta;
         }
+        if (in_array($prefijoFiltro, array('00', '01', '50'), true)) {
+            $where[] = 'k.CODPREFIJO = ?';
+            $params[] = $prefijoFiltro;
+        }
         if ($busqueda !== '') {
-            $where[] = "(k.CODPREFIJO CONTAINING ? OR k.NUMERO CONTAINING ? OR COALESCE(tc.NOMBRE, '') CONTAINING ? OR COALESCE(tv.NOMBRE, '') CONTAINING ?)";
+            $where[] = "(
+                CAST(COALESCE(k.CODPREFIJO, '') AS VARCHAR(10)) CONTAINING ?
+                OR CAST(k.NUMERO AS VARCHAR(30)) CONTAINING ?
+                OR CAST(COALESCE(tc.NOMBRE, '') AS VARCHAR(120)) CONTAINING ?
+                OR CAST(COALESCE(tv.NOMBRE, '') AS VARCHAR(120)) CONTAINING ?
+            )";
             $params[] = $busqueda;
             $params[] = $busqueda;
             $params[] = $busqueda;
             $params[] = $busqueda;
+        }
+
+        $exprZona = "''";
+        if ($usaZonas) {
+            $exprZona = "COALESCE(
+                NULLIF(CASE WHEN z1.ZONAID IS NOT NULL THEN TRIM(CAST(z1.ZONAID AS VARCHAR(10))) || ' - ' || TRIM(COALESCE(z1.NOMBRE, '')) ELSE '' END, ''),
+                NULLIF(CASE WHEN z2.ZONAID IS NOT NULL THEN TRIM(CAST(z2.ZONAID AS VARCHAR(10))) || ' - ' || TRIM(COALESCE(z2.NOMBRE, '')) ELSE '' END, '')
+                " . ($usaZonaTextoTercero ? ", NULLIF(TRIM(tc.ZONA), '')" : "") . "
+            )";
+        } elseif ($usaZonaTextoTercero) {
+            $exprZona = "COALESCE(NULLIF(TRIM(tc.ZONA), ''), '')";
+        }
+
+        if (!empty($zonasSelLimpio)) {
+            $in = array();
+            foreach ($zonasSelLimpio as $zonaSel) {
+                $in[] = '?';
+                $params[] = $zonaSel;
+            }
+            $where[] = "TRIM(COALESCE(" . $exprZona . ", '')) IN (" . implode(',', $in) . ")";
         }
 
         $sql = "
@@ -687,15 +1123,16 @@ try {
                 k.NUMERO,
                 k.FECHA,
                 k.HORA,
-                COALESCE(tc.NOMBRE, '') AS CLIENTE,
-                COALESCE(tv.NOMBRE, '') AS VENDEDOR,
-                CAST(COALESCE(ks.PESO, 0) AS CHAR(30)) AS PESO_TXT,
+                CAST(COALESCE(tc.NOMBRE, '') AS VARCHAR(120)) AS CLIENTE,
+                CAST(" . $exprZona . " AS VARCHAR(120)) AS ZONA_TXT,
+                CAST(COALESCE(tv.NOMBRE, '') AS VARCHAR(120)) AS VENDEDOR,
+                CAST((" . sqlPesoRemision('k.KARDEXID') . ") AS CHAR(30)) AS PESO_TXT,
                 CAST(COALESCE(k.VRBASE, 0) AS CHAR(30)) AS VALOR_BASE_TXT,
                 k.SN_GUIA_ID
             FROM KARDEX k
-            LEFT JOIN KARDEXSELF ks ON ks.KARDEXID = k.KARDEXID
             LEFT JOIN TERCEROS tc ON tc.TERID = k.CLIENTE
             LEFT JOIN TERCEROS tv ON tv.TERID = k.VENDEDOR
+            " . ($usaZonas ? "LEFT JOIN ZONAS z1 ON z1.ZONAID = tc.ZONA1 LEFT JOIN ZONAS z2 ON z2.ZONAID = tc.ZONA2" : "") . "
         ";
 
         if (!empty($where)) {
@@ -714,6 +1151,7 @@ try {
                 'remision' => construirRemision($row['CODPREFIJO'], $row['NUMERO']),
                 'fecha_hora' => construirFechaHoraTexto($row['FECHA'], $row['HORA']),
                 'cliente' => textoSeguro($row['CLIENTE']),
+                'zona' => textoSeguro($row['ZONA_TXT']),
                 'vendedor' => textoSeguro($row['VENDEDOR']),
                 'peso' => numeroDesdeFirebird($row['PESO_TXT']),
                 'valor_base' => numeroDesdeFirebird($row['VALOR_BASE_TXT']),
@@ -722,6 +1160,57 @@ try {
         }
 
         responder(true, array('data' => $data));
+    }
+
+    if ($action === 'listar_zonas_filtro_remision') {
+        $prefijoFiltro = strtoupper(trim((string)(isset($_POST['prefijo']) ? $_POST['prefijo'] : '')));
+
+        $where = array();
+        $params = array();
+        $where[] = "k.CODCOMP = 'RS'";
+        $where[] = "k.FECASENTAD IS NOT NULL";
+        $where[] = "k.FECANULADO IS NULL";
+
+        if (in_array($prefijoFiltro, array('00', '01', '50'), true)) {
+            $where[] = 'k.CODPREFIJO = ?';
+            $params[] = $prefijoFiltro;
+        }
+
+        $exprZona = "''";
+        if ($usaZonas) {
+            $exprZona = "COALESCE(
+                NULLIF(CASE WHEN z1.ZONAID IS NOT NULL THEN TRIM(CAST(z1.ZONAID AS VARCHAR(10))) || ' - ' || TRIM(COALESCE(z1.NOMBRE, '')) ELSE '' END, ''),
+                NULLIF(CASE WHEN z2.ZONAID IS NOT NULL THEN TRIM(CAST(z2.ZONAID AS VARCHAR(10))) || ' - ' || TRIM(COALESCE(z2.NOMBRE, '')) ELSE '' END, '')
+                " . ($usaZonaTextoTercero ? ", NULLIF(TRIM(tc.ZONA), '')" : "") . "
+            )";
+        } elseif ($usaZonaTextoTercero) {
+            $exprZona = "COALESCE(NULLIF(TRIM(tc.ZONA), ''), '')";
+        }
+
+        if ($exprZona === "''") {
+            responder(true, array('data' => array()));
+        }
+
+        $sql = "
+            SELECT DISTINCT " . $exprZona . " AS ZONA_TXT
+            FROM KARDEX k
+            LEFT JOIN TERCEROS tc ON tc.TERID = k.CLIENTE
+            " . ($usaZonas ? "LEFT JOIN ZONAS z1 ON z1.ZONAID = tc.ZONA1 LEFT JOIN ZONAS z2 ON z2.ZONAID = tc.ZONA2" : "") . "
+            WHERE " . implode(' AND ', $where) . "
+              AND COALESCE(" . $exprZona . ", '') <> ''
+            ORDER BY 1
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $zonas = array();
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $z = textoSeguro($row['ZONA_TXT']);
+            if ($z !== '') {
+                $zonas[] = $z;
+            }
+        }
+        responder(true, array('data' => $zonas));
     }
 
     if ($action === 'agregar_remision_guia') {
@@ -751,10 +1240,9 @@ try {
                 SELECT
                     k.KARDEXID,
                     k.SN_GUIA_ID,
-                    CAST(COALESCE(ks.PESO, 0) AS CHAR(30)) AS PESO_TXT,
+                    CAST((" . sqlPesoRemision('k.KARDEXID') . ") AS CHAR(30)) AS PESO_TXT,
                     CAST(COALESCE(k.VRBASE, 0) AS CHAR(30)) AS VALOR_BASE_TXT
                 FROM KARDEX k
-                LEFT JOIN KARDEXSELF ks ON ks.KARDEXID = k.KARDEXID
                 WHERE k.KARDEXID = ?
                   AND k.CODCOMP = 'RS'
                   AND k.FECASENTAD IS NOT NULL

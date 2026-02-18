@@ -12,7 +12,7 @@ function textoSeguroPrint($valor) {
 }
 
 function numeroEnteroPrint($valor) {
-    return number_format((float)$valor, 0, ',', '.');
+    return number_format(numeroDesdeFirebirdPrint($valor), 0, ',', '.');
 }
 
 function fechaHoraPrint($fecha, $hora) {
@@ -48,6 +48,72 @@ function fechaGuiaPrint($timestamp) {
     return date('d/m/Y H:i', $ts);
 }
 
+function estadoGuiaTextoPrint($estado) {
+    $e = strtoupper(trim((string)$estado));
+    if ($e === 'FINALIZADO') {
+        return 'ENTREGADO';
+    }
+    return $e;
+}
+
+function estadoEntregaTextoPrint($estado) {
+    $e = strtoupper(trim((string)$estado));
+    if ($e === '') {
+        return 'PENDIENTE';
+    }
+    if ($e === 'ENTREGA_PARCIAL') {
+        return 'ENTREGA PARCIAL';
+    }
+    return $e;
+}
+
+function numeroDesdeFirebirdPrint($valor) {
+    if ($valor === null) {
+        return 0.0;
+    }
+    if (is_int($valor) || is_float($valor)) {
+        return (float)$valor;
+    }
+
+    $txt = trim((string)$valor);
+    if ($txt === '') {
+        return 0.0;
+    }
+
+    $txt = str_replace(' ', '', $txt);
+
+    if (strpos($txt, ',') !== false && strpos($txt, '.') !== false) {
+        if (strrpos($txt, ',') > strrpos($txt, '.')) {
+            $txt = str_replace('.', '', $txt);
+            $txt = str_replace(',', '.', $txt);
+        } else {
+            $txt = str_replace(',', '', $txt);
+        }
+    } elseif (strpos($txt, ',') !== false) {
+        $txt = str_replace(',', '.', $txt);
+    }
+
+    return is_numeric($txt) ? (float)$txt : 0.0;
+}
+
+function sqlPesoRemisionPrint($exprKardexId) {
+    return "
+        (
+            SELECT SUM(COALESCE(dk.CANMAT, dk.CANLISTA, 0) * COALESCE(m.PESO, 0))
+            FROM DEKARDEX dk
+            LEFT JOIN MATERIAL m ON m.MATID = dk.MATID
+            WHERE dk.KARDEXID = " . $exprKardexId . "
+        )
+    ";
+}
+
+function columnaExistePrint(PDO $pdo, $tabla, $columna) {
+    $sql = "SELECT COUNT(*) FROM RDB\$RELATION_FIELDS WHERE RDB\$RELATION_NAME = ? AND RDB\$FIELD_NAME = ?";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(array(strtoupper($tabla), strtoupper($columna)));
+    return ((int)$stmt->fetchColumn()) > 0;
+}
+
 if ($idGuia <= 0) {
     ?>
     <!DOCTYPE html>
@@ -62,6 +128,10 @@ if ($idGuia <= 0) {
 $pdo = new PDO('firebird:dbname=127.0.0.1:' . $contenidoBdActual, 'SYSDBA', 'masterkey');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+$usaVehiculo = columnaExistePrint($pdo, 'SN_GUIAS', 'ID_VEHICULO') && columnaExistePrint($pdo, 'VEHICULO', 'VEHICULOID');
+$campoVehiculo = $usaVehiculo ? "COALESCE(v.PLACA, '') AS PLACA_VEHICULO" : "'' AS PLACA_VEHICULO";
+$joinVehiculo = $usaVehiculo ? "LEFT JOIN VEHICULO v ON v.VEHICULOID = g.ID_VEHICULO" : "";
+
 $sqlGuia = "
     SELECT
         g.ID,
@@ -71,11 +141,17 @@ $sqlGuia = "
         g.ESTADO_ACTUAL,
         g.USUARIO_CREA,
         COALESCE(tc.NOMBRE, '') AS CONDUCTOR,
-        CAST((SELECT COALESCE(SUM(d.PESO), 0) FROM SN_GUIAS_DETALLE d WHERE d.ID_GUIA = g.ID) AS CHAR(30)) AS TOTAL_PESO,
+        $campoVehiculo,
+        CAST((
+            SELECT COALESCE(SUM(COALESCE(NULLIF((" . sqlPesoRemisionPrint('d.KARDEX_ID') . "), 0), COALESCE(d.PESO, 0), 0)), 0)
+            FROM SN_GUIAS_DETALLE d
+            WHERE d.ID_GUIA = g.ID
+        ) AS CHAR(30)) AS TOTAL_PESO,
         CAST((SELECT COALESCE(SUM(d.VALOR_BASE), 0) FROM SN_GUIAS_DETALLE d WHERE d.ID_GUIA = g.ID) AS CHAR(30)) AS TOTAL_VALOR,
         (SELECT COUNT(*) FROM SN_GUIAS_DETALLE d WHERE d.ID_GUIA = g.ID) AS TOTAL_REMISIONES
     FROM SN_GUIAS g
     LEFT JOIN TERCEROS tc ON tc.TERID = g.ID_CONDUCTOR
+    $joinVehiculo
     WHERE g.ID = ?
 ";
 
@@ -103,12 +179,14 @@ $sqlDet = "
         k.HORA,
         COALESCE(tc.NOMBRE, '') AS CLIENTE,
         COALESCE(tv.NOMBRE, '') AS VENDEDOR,
-        CAST(COALESCE(d.PESO, 0) AS CHAR(30)) AS PESO,
+        COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') AS ESTADO_ENTREGA,
+        CAST(COALESCE(NULLIF((" . sqlPesoRemisionPrint('d.KARDEX_ID') . "), 0), COALESCE(d.PESO, 0), 0) AS CHAR(30)) AS PESO,
         CAST(COALESCE(d.VALOR_BASE, 0) AS CHAR(30)) AS VALOR_BASE
     FROM SN_GUIAS_DETALLE d
     LEFT JOIN KARDEX k ON k.KARDEXID = d.KARDEX_ID
     LEFT JOIN TERCEROS tc ON tc.TERID = k.CLIENTE
     LEFT JOIN TERCEROS tv ON tv.TERID = k.VENDEDOR
+    LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID
     WHERE d.ID_GUIA = ?
     ORDER BY d.ID ASC
 ";
@@ -305,11 +383,15 @@ $numeroGuia = trim((string)$guia['PREFIJO']) . '-' . trim((string)$guia['CONSECU
             </div>
             <div class="info-card">
                 <span class="info-lab">Estado</span>
-                <span class="info-val"><?php echo textoSeguroPrint($guia['ESTADO_ACTUAL']); ?></span>
+                <span class="info-val"><?php echo textoSeguroPrint(estadoGuiaTextoPrint($guia['ESTADO_ACTUAL'])); ?></span>
             </div>
             <div class="info-card">
                 <span class="info-lab">Conductor</span>
                 <span class="info-val"><?php echo textoSeguroPrint($guia['CONDUCTOR']); ?></span>
+            </div>
+            <div class="info-card">
+                <span class="info-lab">Vehiculo</span>
+                <span class="info-val"><?php echo textoSeguroPrint($guia['PLACA_VEHICULO']); ?></span>
             </div>
             <div class="info-card">
                 <span class="info-lab">Usuario</span>
@@ -327,6 +409,7 @@ $numeroGuia = trim((string)$guia['PREFIJO']) . '-' . trim((string)$guia['CONSECU
                     <th>Fecha/Hora</th>
                     <th>Cliente</th>
                     <th>Vendedor</th>
+                    <th>Estado entrega</th>
                     <th class="text-end">Peso</th>
                     <th class="text-end">Valor base</th>
                 </tr>
@@ -339,24 +422,25 @@ $numeroGuia = trim((string)$guia['PREFIJO']) . '-' . trim((string)$guia['CONSECU
                         <td><?php echo textoSeguroPrint(fechaHoraPrint($item['FECHA'], $item['HORA'])); ?></td>
                         <td><?php echo textoSeguroPrint($item['CLIENTE']); ?></td>
                         <td><?php echo textoSeguroPrint($item['VENDEDOR']); ?></td>
+                        <td><?php echo textoSeguroPrint(estadoEntregaTextoPrint($item['ESTADO_ENTREGA'])); ?></td>
                         <td class="text-end"><?php echo numeroEnteroPrint($item['PESO']); ?></td>
                         <td class="text-end">$ <?php echo numeroEnteroPrint($item['VALOR_BASE']); ?></td>
                     </tr>
                 <?php endforeach; ?>
             <?php else: ?>
                 <tr>
-                    <td colspan="6" class="empty">No hay remisiones asociadas a esta guia.</td>
+                    <td colspan="7" class="empty">No hay remisiones asociadas a esta guia.</td>
                 </tr>
             <?php endif; ?>
             </tbody>
             <tfoot class="tfoot">
                 <tr>
-                    <td colspan="4" class="text-end">Totales</td>
+                    <td colspan="5" class="text-end">Totales</td>
                     <td class="text-end"><?php echo numeroEnteroPrint($guia['TOTAL_PESO']); ?></td>
                     <td class="text-end">$ <?php echo numeroEnteroPrint($guia['TOTAL_VALOR']); ?></td>
                 </tr>
                 <tr>
-                    <td colspan="6"><strong>Total remisiones:</strong> <?php echo (int)$guia['TOTAL_REMISIONES']; ?></td>
+                    <td colspan="7"><strong>Total remisiones:</strong> <?php echo (int)$guia['TOTAL_REMISIONES']; ?></td>
                 </tr>
             </tfoot>
         </table>

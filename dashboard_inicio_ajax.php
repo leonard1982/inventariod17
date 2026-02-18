@@ -358,12 +358,19 @@ function dashboardBuildPcData(PDO $pdo, $anio, $mes) {
     );
 
     if (!empty($rowsEstados)) {
-        $labels = array();
-        $values = array();
+        $acumulado = array();
         foreach ($rowsEstados as $row) {
-            $labels[] = dashboardTexto($row['ESTADO']);
-            $values[] = (int)$row['TOTAL'];
+            $estadoTxt = strtoupper(dashboardTexto($row['ESTADO']));
+            if ($estadoTxt === 'FINALIZADO') {
+                $estadoTxt = 'ENTREGADO';
+            }
+            if (!isset($acumulado[$estadoTxt])) {
+                $acumulado[$estadoTxt] = 0;
+            }
+            $acumulado[$estadoTxt] += (int)$row['TOTAL'];
         }
+        $labels = array_keys($acumulado);
+        $values = array_values($acumulado);
         $series['estados_guia'] = array('labels' => $labels, 'values' => $values);
     } else {
         $series['estados_guia'] = array('labels' => array('SIN DATOS'), 'values' => array(0));
@@ -453,7 +460,7 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
         }
     }
 
-    $whereGuiasPend = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'";
+    $whereGuiasPend = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) NOT IN ('FINALIZADO', 'ENTREGADO')";
     if ($filtroConductor !== '') {
         $whereGuiasPend .= " AND " . $filtroConductor;
     }
@@ -471,7 +478,7 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
     $cntPar = 0;
 
     if ($hayEstadoDetalle) {
-        $whereBasePend = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'";
+        $whereBasePend = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) NOT IN ('FINALIZADO', 'ENTREGADO')";
         if ($filtroConductor !== '') {
             $whereBasePend .= " AND " . $filtroConductor;
         }
@@ -546,7 +553,7 @@ function dashboardBuildMobileConductorData(PDO $pdo, $usuario, $esAdmin) {
             $paramsConductor
         );
     } else {
-        $whereBasePendSinEstado = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) <> 'FINALIZADO'";
+        $whereBasePendSinEstado = "UPPER(TRIM(COALESCE(g.ESTADO_ACTUAL, ''))) NOT IN ('FINALIZADO', 'ENTREGADO')";
         if ($filtroConductor !== '') {
             $whereBasePendSinEstado .= " AND " . $filtroConductor;
         }

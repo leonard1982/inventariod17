@@ -261,7 +261,10 @@ function obtenerCatalogoMenusAplicacion() {
         'log' => array('texto' => 'Log Maximos y Minimos', 'tipo' => 'principal', 'url' => 'Log_maximos_minimos.php'),
         'backorder' => array('texto' => 'BackOrder', 'tipo' => 'principal', 'url' => 'backorder.php'),
         'guiasdespachos' => array('texto' => 'GUIAS (Despachos)', 'tipo' => 'principal', 'url' => 'guias_despachos.php'),
+        'centrokpi' => array('texto' => 'Centro KPI', 'tipo' => 'principal', 'url' => 'centro_kpi.php'),
         'despachosconductor' => array('texto' => 'Despachos conductor', 'tipo' => 'principal', 'url' => 'despachos_conductor.php'),
+        'rutaconductor' => array('texto' => 'Ruta conductor (Mapa)', 'tipo' => 'principal', 'url' => 'ruta_conductor_mapa.php'),
+        'retirados' => array('texto' => 'Retirados', 'tipo' => 'principal', 'url' => 'retirados.php'),
         'listarotacion' => array('texto' => 'Rotacion Inventario', 'tipo' => 'principal', 'url' => 'rotacion_inventario.php'),
         'pedidosgeneradosauto' => array('texto' => 'Pedidos Generados', 'tipo' => 'principal', 'url' => 'PedidosGeneradosAutomaticamente.php'),
         'listaestados' => array('texto' => 'Estados Pedidos', 'tipo' => 'principal', 'url' => 'estados_pedidos.php'),
@@ -271,7 +274,7 @@ function obtenerCatalogoMenusAplicacion() {
         'listadoproductosclasificados' => array('texto' => 'Productos Clasificados', 'tipo' => 'principal', 'url' => 'listado_productos_clasificados.php'),
         'listaconfiguraciones' => array('texto' => 'Configuraciones', 'tipo' => 'usuario', 'url' => 'ListaConfiguraciones.php'),
         'listaconexiones' => array('texto' => 'Conexiones', 'tipo' => 'usuario', 'url' => 'conexiones.php'),
-        'permisosmenu' => array('texto' => 'Permisos de menu', 'tipo' => 'usuario', 'url' => 'permisos_menu.php', 'solo_admin' => true),
+        'permisosmenu' => array('texto' => 'Permisos de menu', 'tipo' => 'usuario', 'url' => 'permisos_menu.php', 'solo_admin' => true, 'delegable_admin' => true),
         'salir' => array('texto' => 'Salir', 'tipo' => 'usuario', 'url' => 'index.php')
     );
 }
@@ -421,6 +424,35 @@ function usuarioTienePermisoMenu($usuario, $menuId) {
     return $estado['mapa'][$menu] === 'S';
 }
 
+function usuarioTienePermisoExplicitoMenu($usuario, $menuId) {
+    $menu = strtolower(trim((string)$menuId));
+    if ($menu === '' || $menu === 'salir') {
+        return true;
+    }
+
+    $estado = obtenerEstadoPermisosMenuUsuario($usuario);
+    if ($estado['es_admin']) {
+        return true;
+    }
+
+    if (!$estado['configurado']) {
+        return false;
+    }
+
+    if (!isset($estado['mapa'][$menu])) {
+        return false;
+    }
+
+    return $estado['mapa'][$menu] === 'S';
+}
+
+function usuarioPuedeAdministrarPermisosMenu($usuario) {
+    if (esUsuarioAdministradorMenu($usuario)) {
+        return true;
+    }
+    return usuarioTienePermisoExplicitoMenu($usuario, 'permisosmenu');
+}
+
 function obtenerMenusPermitidosUsuario($usuario, $tipo = null) {
     $catalogo = obtenerCatalogoMenusAplicacion();
     $estado = obtenerEstadoPermisosMenuUsuario($usuario);
@@ -434,7 +466,15 @@ function obtenerMenusPermitidosUsuario($usuario, $tipo = null) {
 
         $soloAdmin = !empty($meta['solo_admin']);
         if ($soloAdmin && !$esAdmin) {
-            continue;
+            $delegableAdmin = !empty($meta['delegable_admin']);
+            if (!$delegableAdmin) {
+                continue;
+            }
+
+            $menuKey = strtolower((string)$menuId);
+            if (!$estado['configurado'] || !isset($estado['mapa'][$menuKey]) || $estado['mapa'][$menuKey] !== 'S') {
+                continue;
+            }
         }
 
         if (!usuarioTienePermisoMenu($usuario, $menuId)) {
@@ -463,8 +503,15 @@ function obtenerMapaArchivoMenuAplicacion() {
         'guias_despachos.php' => 'guiasdespachos',
         'guias_despachos_ajax.php' => 'guiasdespachos',
         'guia_despacho_print.php' => 'guiasdespachos',
+        'centro_kpi.php' => 'centrokpi',
+        'centro_kpi_ajax.php' => 'centrokpi',
         'despachos_conductor.php' => 'despachosconductor',
         'despachos_conductor_ajax.php' => 'despachosconductor',
+        'ruta_conductor_mapa.php' => 'rutaconductor',
+        'ruta_conductor_mapa_ajax.php' => 'rutaconductor',
+        'ruta_conductor_mapa_pdf.php' => 'rutaconductor',
+        'retirados.php' => 'retirados',
+        'retirados_ajax.php' => 'retirados',
         'rotacion_inventario.php' => 'listarotacion',
         'rotacion_inventario_ajax.php' => 'listarotacion',
         'pedidosgeneradosautomaticamente.php' => 'pedidosgeneradosauto',

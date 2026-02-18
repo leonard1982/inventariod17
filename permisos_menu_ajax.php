@@ -12,8 +12,8 @@ if (empty($_SESSION['user'])) {
     respuestaPermisos(false, array('message' => 'Sesion no valida.'));
 }
 
-if (!esUsuarioAdministradorMenu($_SESSION['user'])) {
-    respuestaPermisos(false, array('message' => 'Acceso denegado. Solo admin puede gestionar permisos.'));
+if (!usuarioPuedeAdministrarPermisosMenu($_SESSION['user'])) {
+    respuestaPermisos(false, array('message' => 'Acceso denegado. No tiene permiso para gestionar permisos.'));
 }
 
 $action = isset($_POST['action']) ? trim((string)$_POST['action']) : '';
@@ -201,7 +201,7 @@ if ($action === 'guardar_permisos_usuario') {
         $flag = isset($estado[$menuKey]) ? strtoupper(trim((string)$estado[$menuKey])) : 'N';
         $permitido = ($flag === 'S') ? 'S' : 'N';
 
-        if (!empty($meta['solo_admin']) && !$usuarioObjetivoAdmin) {
+        if (!empty($meta['solo_admin']) && empty($meta['delegable_admin']) && !$usuarioObjetivoAdmin) {
             $permitido = 'N';
         }
 
@@ -243,11 +243,13 @@ if ($action === 'obtener_vende_usuario') {
     }
 
     $variab = 'GVENDE' . $usuario;
+    $variabPv = 'GVENDEPV' . $usuario;
     $valor = obtenerValorVariableVarios($conect_bd_actual, $variab);
     $conductor = obtenerResumenConductorDesdeValor($conect_bd_actual, $valor);
 
     respuestaPermisos(true, array(
         'variab' => $variab,
+        'variab_pv' => $variabPv,
         'valor' => $valor,
         'resuelto' => $conductor ? true : false,
         'conductor' => $conductor
@@ -271,12 +273,15 @@ if ($action === 'guardar_vende_usuario') {
     }
 
     $variab = 'GVENDE' . $usuario;
+    $variabPv = 'GVENDEPV' . $usuario;
     guardarValorVariableVarios($conect_bd_actual, $variab, $valor);
+    guardarValorVariableVarios($conect_bd_actual, $variabPv, $valor);
 
     $conductor = obtenerResumenConductorDesdeValor($conect_bd_actual, $valor);
     respuestaPermisos(true, array(
-        'message' => 'Variable ' . $variab . ' guardada.',
+        'message' => 'Variables ' . $variab . ' y ' . $variabPv . ' guardadas.',
         'variab' => $variab,
+        'variab_pv' => $variabPv,
         'valor' => $valor,
         'resuelto' => $conductor ? true : false,
         'conductor' => $conductor
@@ -290,11 +295,14 @@ if ($action === 'limpiar_vende_usuario') {
     }
 
     $variab = 'GVENDE' . $usuario;
+    $variabPv = 'GVENDEPV' . $usuario;
     eliminarVariableVarios($conect_bd_actual, $variab);
+    eliminarVariableVarios($conect_bd_actual, $variabPv);
 
     respuestaPermisos(true, array(
-        'message' => 'Variable ' . $variab . ' eliminada.',
-        'variab' => $variab
+        'message' => 'Variables ' . $variab . ' y ' . $variabPv . ' eliminadas.',
+        'variab' => $variab,
+        'variab_pv' => $variabPv
     ));
 }
 

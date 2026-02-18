@@ -12,6 +12,9 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
     <?php includeAssets(); ?>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
+        html, body {
+            overscroll-behavior-y: none;
+        }
         .dc-page { padding: 0.9rem 0.55rem 1rem; background: #fff; font-size: 0.93rem; }
         .dc-shell { max-width: 1450px; margin: 0 auto; }
         .dc-card {
@@ -91,6 +94,10 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         .dc-select-col.estado {
             flex: 1 1 0;
         }
+        .dc-select-col.reset {
+            flex: 0 0 auto;
+            min-width: 112px;
+        }
         .dc-meta-line {
             display: flex;
             align-items: center;
@@ -157,6 +164,44 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
             background: #fff;
         }
         .dc-chat-meta { font-size: 0.72rem; color: #60798e; margin-bottom: 0.15rem; }
+        .dc-pod-wrap {
+            margin-top: 0.55rem;
+            border: 1px solid #d8e7f3;
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 0.55rem;
+        }
+        .dc-pod-title {
+            margin: 0 0 0.4rem;
+            color: #164361;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .dc-sign-canvas {
+            width: 100%;
+            max-width: 420px;
+            height: 140px;
+            border: 1px dashed #9fb8cd;
+            border-radius: 8px;
+            background: #fff;
+            touch-action: none;
+            display: block;
+        }
+        .dc-pod-preview {
+            margin-top: 0.35rem;
+            max-width: 220px;
+            max-height: 120px;
+            border: 1px solid #d8e7f3;
+            border-radius: 8px;
+            display: none;
+            object-fit: cover;
+            background: #fff;
+        }
+        .dc-pod-meta {
+            font-size: 0.75rem;
+            color: #48647a;
+            margin-top: 0.3rem;
+        }
         .dc-pendiente-fijo {
             display: inline-flex;
             align-items: center;
@@ -257,6 +302,14 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         <div class="dc-body">
             <div class="dc-filtros">
                 <div class="dc-selects-line">
+                    <div class="dc-select-col estado">
+                        <label class="form-label mb-1" for="dcFiltroEstadoGuia">Estado guia</label>
+                        <select id="dcFiltroEstadoGuia" class="form-select">
+                            <option value="PENDIENTES" selected>PENDIENTES</option>
+                            <option value="TODAS">TODAS</option>
+                            <option value="ENTREGADAS">ENTREGADAS</option>
+                        </select>
+                    </div>
                     <div class="dc-select-col guia">
                         <label class="form-label mb-1" for="dcGuiaSelect">Guia</label>
                         <select id="dcGuiaSelect" class="form-select">
@@ -273,9 +326,15 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
                             <option value="ENTREGA_PARCIAL">ENTREGA PARCIAL</option>
                         </select>
                     </div>
+                    <div class="dc-select-col reset">
+                        <label class="form-label mb-1 d-none d-md-block">&nbsp;</label>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="dcBtnResetFiltros">
+                            <i class="fas fa-eraser"></i> Reset
+                        </button>
+                    </div>
                 </div>
                 <div class="dc-meta-line">
-                    <span class="dc-pendiente-fijo"><i class="fas fa-filter"></i> Solo guias pendientes</span>
+                    <span class="dc-pendiente-fijo" id="dcGuiaModoTexto"><i class="fas fa-filter"></i> Solo guias pendientes</span>
                     <span class="badge text-bg-light border" id="dcResumenGuias">Sin datos</span>
                 </div>
             </div>
@@ -299,7 +358,7 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
                 </div>
             </section>
 
-            <div class="dc-resumen" id="dcResumenSeleccion">Selecciona una guia o deja TODAS para ver pendientes.</div>
+            <div class="dc-resumen" id="dcResumenSeleccion">Selecciona una guia o deja TODAS para ver remisiones.</div>
 
             <div class="dc-tabla-wrap">
                 <table class="table table-hover align-middle" id="dcTablaRemisiones">
@@ -328,20 +387,53 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-comment-dots"></i> Justificacion de entrega</h5>
+                <h5 class="modal-title"><i class="fas fa-clipboard-check"></i> Registrar estado de entrega</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="dcJIdGuia" value="0">
                 <input type="hidden" id="dcJKardexId" value="0">
-                <input type="hidden" id="dcJAccion" value="justificar_no_entregado">
                 <div class="mb-2"><strong id="dcJRemision">-</strong></div>
-                <div class="small text-muted mb-1" id="dcJTipoEstado">Justificacion de no entregado</div>
-                <textarea id="dcJTexto" class="form-control" rows="4" maxlength="300" placeholder="Escribe aqui la justificacion..."></textarea>
+                <div class="mb-2">
+                    <label class="form-label mb-1" for="dcJEstado">Estado de entrega</label>
+                    <select id="dcJEstado" class="form-select">
+                        <option value="ENTREGADO">ENTREGADO</option>
+                        <option value="NO_ENTREGADO">NO ENTREGADO</option>
+                        <option value="ENTREGA_PARCIAL">ENTREGA PARCIAL</option>
+                    </select>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label mb-1" for="dcJTexto">Justificacion</label>
+                    <textarea id="dcJTexto" class="form-control" rows="4" maxlength="300" placeholder="Opcional para ENTREGADO"></textarea>
+                    <div class="form-text" id="dcJTextoAyuda">Para ENTREGADO es opcional.</div>
+                </div>
+
+                <div class="dc-pod-wrap" id="dcJPodWrap">
+                    <h6 class="dc-pod-title"><i class="fas fa-shield-check"></i> Prueba de entrega (POD)</h6>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label mb-1" for="dcJFoto">Foto de entrega</label>
+                            <input type="file" class="form-control" id="dcJFoto" accept="image/*" capture="environment">
+                            <img id="dcJFotoPreview" class="dc-pod-preview" alt="Preview foto POD">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label mb-1">Firma receptor</label>
+                            <canvas id="dcJFirmaCanvas" class="dc-sign-canvas" width="420" height="140"></canvas>
+                            <div class="mt-1 d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="dcBtnLimpiarFirma"><i class="fas fa-eraser"></i> Limpiar firma</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="dcBtnGeo"><i class="fas fa-location-crosshairs"></i> Capturar ubicacion</button>
+                            </div>
+                            <div class="dc-pod-meta" id="dcJGeoTxt">Ubicacion no capturada.</div>
+                            <input type="hidden" id="dcJLat" value="">
+                            <input type="hidden" id="dcJLng" value="">
+                            <input type="hidden" id="dcJAcc" value="">
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
-                <button type="button" class="btn btn-danger" id="dcBtnGuardarJustificacion"><i class="fas fa-save"></i> Guardar</button>
+                <button type="button" class="btn btn-primary" id="dcBtnGuardarJustificacion"><i class="fas fa-save"></i> Guardar</button>
             </div>
         </div>
     </div>
@@ -377,6 +469,10 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
     var remisionesVisibles = [];
     var dcMobileChartEstados = null;
     var dcMobileChartGuias = null;
+    var dcFirmaTieneTrazos = false;
+    var dcFirmaCanvas = null;
+    var dcFirmaCtx = null;
+    var dcFirmaDibujando = false;
 
     function notificar(icon, title, text) {
         if (typeof Swal !== 'undefined' && Swal.fire) {
@@ -435,8 +531,65 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir);
     }
 
+    function urlPdfRemision(kardexId, token) {
+        if (!kardexId || !token) {
+            return '';
+        }
+        return 'remision_entrega_pdf.php?kardex_id=' + encodeURIComponent(kardexId) + '&t=' + encodeURIComponent(token);
+    }
+
     function esVistaMovilConductor() {
         return false;
+    }
+
+    function bloquearPullToRefreshMovil() {
+        if (!('ontouchstart' in window)) {
+            return;
+        }
+
+        var startY = 0;
+        var startX = 0;
+
+        function buscarScrollPadre(el) {
+            var n = el;
+            while (n && n !== document.body && n !== document.documentElement) {
+                try {
+                    var st = window.getComputedStyle(n);
+                    var oy = st ? st.overflowY : '';
+                    if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) {
+                        return n;
+                    }
+                } catch (e) {}
+                n = n.parentElement;
+            }
+            return null;
+        }
+
+        document.addEventListener('touchstart', function(e) {
+            if (!e.touches || e.touches.length !== 1) {
+                return;
+            }
+            startY = e.touches[0].clientY;
+            startX = e.touches[0].clientX;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', function(e) {
+            if (!e.touches || e.touches.length !== 1) {
+                return;
+            }
+
+            var dy = e.touches[0].clientY - startY;
+            var dx = Math.abs(e.touches[0].clientX - startX);
+            if (dy <= 8 || dy <= dx) {
+                return;
+            }
+
+            var scrollPadre = buscarScrollPadre(e.target);
+            var enTope = scrollPadre ? scrollPadre.scrollTop <= 0 : ((window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0) <= 0);
+            if (enTope) {
+                e.preventDefault();
+            }
+        }, { passive: false });
     }
 
     function calcularMetricasConductor(items) {
@@ -558,14 +711,34 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         }
     }
 
+    function estadoGuiaFiltro() {
+        return String($('#dcFiltroEstadoGuia').val() || 'PENDIENTES').toUpperCase();
+    }
+
+    function textoModoGuias() {
+        var estado = estadoGuiaFiltro();
+        if (estado === 'TODAS') {
+            return '<i class="fas fa-filter"></i> Todas las guias';
+        }
+        if (estado === 'ENTREGADAS') {
+            return '<i class="fas fa-filter"></i> Solo guias entregadas';
+        }
+        return '<i class="fas fa-filter"></i> Solo guias pendientes';
+    }
+
+    function actualizarModoGuiasUI() {
+        $('#dcGuiaModoTexto').html(textoModoGuias());
+    }
+
     function cargarGuias() {
-        var solo = 'S';
+        var estado = estadoGuiaFiltro();
+        actualizarModoGuiasUI();
 
         $.ajax({
             url: 'despachos_conductor_ajax.php',
             type: 'POST',
             dataType: 'json',
-            data: { action: 'listar_guias', solo_pendientes: solo },
+            data: { action: 'listar_guias', estado_guia: estado },
             success: function(resp) {
                 if (!resp || !resp.ok) {
                     $('#dcResumenGuias').text('Error al cargar guias');
@@ -606,23 +779,30 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
 
     function cargarRemisiones() {
         var idGuia = $('#dcGuiaSelect').val() || '';
+        var estado = estadoGuiaFiltro();
 
         if (idGuia === '') {
-            var pendientes = guiasCache.filter(function(g){ return Number(g.total_pendientes || 0) > 0; });
-            if (!pendientes.length) {
-                $('#dcResumenSeleccion').text('No hay guias pendientes para mostrar.');
-                $('#dcCuerpoRemisiones').html('<tr><td colspan="8" class="dc-empty">No hay remisiones pendientes.</td></tr>');
+            var visibles = guiasCache.slice();
+            if (!visibles.length) {
+                if (estado === 'ENTREGADAS') {
+                    $('#dcResumenSeleccion').text('No hay guias entregadas para mostrar.');
+                } else if (estado === 'TODAS') {
+                    $('#dcResumenSeleccion').text('No hay guias para mostrar.');
+                } else {
+                    $('#dcResumenSeleccion').text('No hay guias pendientes para mostrar.');
+                }
+                $('#dcCuerpoRemisiones').html('<tr><td colspan="8" class="dc-empty">No hay remisiones para mostrar.</td></tr>');
                 return;
             }
 
-            var tareas = pendientes.map(function(g){ return cargarRemisionesDeGuia(g.id, g.num_guia); });
+            var tareas = visibles.map(function(g){ return cargarRemisionesDeGuia(g.id, g.num_guia); });
             Promise.all(tareas).then(function(grupos) {
                 var rows = [];
                 for (var i = 0; i < grupos.length; i++) {
                     rows = rows.concat(grupos[i]);
                 }
                 remisionesCache = rows;
-                $('#dcResumenSeleccion').text('Mostrando remisiones pendientes de todas las guias visibles.');
+                $('#dcResumenSeleccion').text('Mostrando remisiones de todas las guias visibles.');
                 aplicarFiltroRemisiones();
             }).catch(function(err){
                 $('#dcCuerpoRemisiones').html('<tr><td colspan="8" class="dc-empty">Error cargando remisiones.</td></tr>');
@@ -632,7 +812,7 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         }
 
         var guia = guiasCache.find(function(g){ return String(g.id) === String(idGuia); });
-        $('#dcResumenSeleccion').text(guia ? ('Guia seleccionada: ' + guia.num_guia + ' | Pendientes: ' + guia.total_pendientes) : 'Guia seleccionada');
+        $('#dcResumenSeleccion').text(guia ? ('Guia seleccionada: ' + guia.num_guia + ' | Pendientes: ' + guia.total_pendientes + ' | Gestionadas: ' + (Number(guia.total_remisiones || 0) - Number(guia.total_pendientes || 0))) : 'Guia seleccionada');
 
         cargarRemisionesDeGuia(idGuia, guia ? guia.num_guia : '').then(function(rows) {
             remisionesCache = rows;
@@ -684,6 +864,19 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
             var mapUrl = urlMapa(r.direccion);
             var waUrl = urlWhatsapp(r.telefono, r.remision);
             var obs = r.observacion || '';
+            var estadoEntrega = String(r.estado_entrega || 'PENDIENTE').toUpperCase();
+            var bloqueado = estadoEntrega !== 'PENDIENTE';
+            var pdfUrl = urlPdfRemision(r.kardex_id, r.token_pdf || '');
+            var podRegistrado = Number(r.tiene_pod || 0) > 0;
+            var pdfDisponible = (estadoEntrega !== 'PENDIENTE') && pdfUrl !== '';
+            var btnEstadoClass = bloqueado ? 'btn-outline-secondary disabled' : 'btn-outline-primary dc-btn-gestionar';
+            var btnEstadoTitle = bloqueado ? 'Estado ya registrado (no editable)' : 'Registrar estado de entrega';
+            var btnEstadoAttrs = bloqueado ? 'disabled aria-disabled="true"' : (
+                'data-id-guia="' + r.id_guia + '" ' +
+                'data-kardex-id="' + r.kardex_id + '" ' +
+                'data-remision="' + escapeHtml(r.remision || '') + '"'
+            );
+            var iconoEstado = bloqueado ? 'fa-lock' : 'fa-clipboard-check';
 
             html += '' +
                 '<tr>' +
@@ -696,9 +889,8 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
                 '<td>' + escapeHtml(obs) + '</td>' +
                 '<td>' +
                     '<div class="dc-actions">' +
-                        '<button type="button" class="btn btn-sm btn-success dc-btn-entregado" data-id-guia="' + r.id_guia + '" data-kardex-id="' + r.kardex_id + '" title="Marcar entregado"><i class="fas fa-check"></i></button>' +
-                        '<button type="button" class="btn btn-sm btn-warning dc-btn-parcial" data-id-guia="' + r.id_guia + '" data-kardex-id="' + r.kardex_id + '" data-remision="' + escapeHtml(r.remision || '') + '" title="Entrega parcial"><i class="fas fa-box-open"></i></button>' +
-                        '<button type="button" class="btn btn-sm btn-danger dc-btn-justificar" data-id-guia="' + r.id_guia + '" data-kardex-id="' + r.kardex_id + '" data-remision="' + escapeHtml(r.remision || '') + '" title="Justificar no entregado"><i class="fas fa-comment-dots"></i></button>' +
+                        '<button type="button" class="btn btn-sm ' + btnEstadoClass + '" ' + btnEstadoAttrs + ' title="' + btnEstadoTitle + '"><i class="fas ' + iconoEstado + '"></i></button>' +
+                        '<a class="btn btn-sm btn-outline-danger ' + (pdfDisponible ? '' : 'disabled') + '" ' + (pdfDisponible ? ('href="' + pdfUrl + '" target="_blank"') : '') + ' title="' + (podRegistrado ? 'PDF final con evidencia POD' : 'PDF remision (sin evidencia POD)') + '"><i class="fas fa-file-pdf"></i></a>' +
                         '<button type="button" class="btn btn-sm btn-primary dc-btn-chat" data-id-guia="' + r.id_guia + '" data-kardex-id="' + r.kardex_id + '" data-remision="' + escapeHtml(r.remision || '') + '" title="Chat entrega"><i class="fas fa-comments"></i><span class="ms-1">' + (r.total_chat || 0) + '</span></button>' +
                         '<a class="btn btn-sm btn-outline-secondary ' + (mapUrl === '' ? 'disabled' : '') + '" ' + (mapUrl ? ('href="' + mapUrl + '" target="_blank"') : '') + ' title="Ir a direccion"><i class="fas fa-location-dot"></i></a>' +
                         '<a class="btn btn-sm btn-outline-success ' + (waUrl === '' ? 'disabled' : '') + '" ' + (waUrl ? ('href="' + waUrl + '" target="_blank"') : '') + ' title="WhatsApp"><i class="fab fa-whatsapp"></i></a>' +
@@ -726,34 +918,206 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         renderRemisiones(items);
     }
 
-    function marcarEntregado(idGuia, kardexId) {
-        $.ajax({
-            url: 'despachos_conductor_ajax.php',
-            type: 'POST',
-            dataType: 'json',
-            data: { action: 'marcar_entregado', id_guia: idGuia, kardex_id: kardexId },
-            success: function(resp) {
-                if (!resp || !resp.ok) {
-                    notificar('error', 'No se pudo actualizar', (resp && resp.message) ? resp.message : 'Error actualizando estado.');
-                    return;
-                }
-                cargarGuias();
-            },
-            error: function(xhr) {
-                notificar('error', 'Error', 'Error de comunicacion. ' + (xhr && xhr.responseText ? xhr.responseText : ''));
-            }
-        });
+    function resetFiltrosConductor() {
+        $('#dcFiltroEstadoGuia').val('PENDIENTES');
+        $('#dcGuiaSelect').val('');
+        $('#dcFiltroEstadoRemision').val('PENDIENTE');
+        cargarGuias();
     }
 
-    function abrirJustificacion(idGuia, kardexId, remision, accion, tipo) {
-        var accionNorm = accion || 'justificar_no_entregado';
-        var tipoTxt = tipo || 'NO ENTREGADO';
+    function actualizarGeoPodTexto() {
+        var lat = $('#dcJLat').val();
+        var lng = $('#dcJLng').val();
+        var acc = $('#dcJAcc').val();
+        if (lat && lng) {
+            var txt = 'Ubicacion: ' + lat + ', ' + lng;
+            if (acc) {
+                txt += ' (precision: ' + acc + ' m)';
+            }
+            $('#dcJGeoTxt').text(txt);
+            return;
+        }
+        $('#dcJGeoTxt').text('Ubicacion no capturada.');
+    }
+
+    function limpiarFirmaPad() {
+        if (!dcFirmaCanvas || !dcFirmaCtx) {
+            return;
+        }
+        dcFirmaCtx.clearRect(0, 0, dcFirmaCanvas.width, dcFirmaCanvas.height);
+        dcFirmaTieneTrazos = false;
+    }
+
+    function firmaDataUrl() {
+        if (!dcFirmaCanvas || !dcFirmaTieneTrazos) {
+            return '';
+        }
+        try {
+            return dcFirmaCanvas.toDataURL('image/png');
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function coordFirmaDesdeEvento(evt) {
+        if (!dcFirmaCanvas) {
+            return null;
+        }
+        var rect = dcFirmaCanvas.getBoundingClientRect();
+        var scaleX = dcFirmaCanvas.width / rect.width;
+        var scaleY = dcFirmaCanvas.height / rect.height;
+        var cx = 0;
+        var cy = 0;
+
+        if (evt.touches && evt.touches.length) {
+            cx = evt.touches[0].clientX;
+            cy = evt.touches[0].clientY;
+        } else if (evt.changedTouches && evt.changedTouches.length) {
+            cx = evt.changedTouches[0].clientX;
+            cy = evt.changedTouches[0].clientY;
+        } else {
+            cx = evt.clientX;
+            cy = evt.clientY;
+        }
+
+        return {
+            x: (cx - rect.left) * scaleX,
+            y: (cy - rect.top) * scaleY
+        };
+    }
+
+    function initFirmaPad() {
+        dcFirmaCanvas = document.getElementById('dcJFirmaCanvas');
+        if (!dcFirmaCanvas) {
+            return;
+        }
+        dcFirmaCtx = dcFirmaCanvas.getContext('2d');
+        if (!dcFirmaCtx) {
+            return;
+        }
+        dcFirmaCtx.lineWidth = 2.2;
+        dcFirmaCtx.lineCap = 'round';
+        dcFirmaCtx.lineJoin = 'round';
+        dcFirmaCtx.strokeStyle = '#163d5c';
+
+        var iniciar = function(evt) {
+            evt.preventDefault();
+            var p = coordFirmaDesdeEvento(evt);
+            if (!p) {
+                return;
+            }
+            dcFirmaDibujando = true;
+            dcFirmaCtx.beginPath();
+            dcFirmaCtx.moveTo(p.x, p.y);
+        };
+        var mover = function(evt) {
+            if (!dcFirmaDibujando) {
+                return;
+            }
+            evt.preventDefault();
+            var p = coordFirmaDesdeEvento(evt);
+            if (!p) {
+                return;
+            }
+            dcFirmaCtx.lineTo(p.x, p.y);
+            dcFirmaCtx.stroke();
+            dcFirmaTieneTrazos = true;
+        };
+        var detener = function(evt) {
+            if (!dcFirmaDibujando) {
+                return;
+            }
+            if (evt && evt.preventDefault) {
+                evt.preventDefault();
+            }
+            dcFirmaDibujando = false;
+        };
+
+        dcFirmaCanvas.addEventListener('mousedown', iniciar);
+        dcFirmaCanvas.addEventListener('mousemove', mover);
+        window.addEventListener('mouseup', detener);
+
+        dcFirmaCanvas.addEventListener('touchstart', iniciar, { passive: false });
+        dcFirmaCanvas.addEventListener('touchmove', mover, { passive: false });
+        dcFirmaCanvas.addEventListener('touchend', detener, { passive: false });
+        dcFirmaCanvas.addEventListener('touchcancel', detener, { passive: false });
+    }
+
+    function resetPodCampos() {
+        $('#dcJFoto').val('');
+        $('#dcJFotoPreview').hide().attr('src', '');
+        $('#dcJLat').val('');
+        $('#dcJLng').val('');
+        $('#dcJAcc').val('');
+        actualizarGeoPodTexto();
+        limpiarFirmaPad();
+    }
+
+    function capturarGeolocalizacionPod() {
+        if (!navigator.geolocation) {
+            notificar('warning', 'Geolocalizacion', 'El navegador no soporta geolocalizacion.');
+            return;
+        }
+        $('#dcJGeoTxt').text('Capturando ubicacion...');
+        navigator.geolocation.getCurrentPosition(function(pos) {
+            var c = pos.coords || {};
+            $('#dcJLat').val((typeof c.latitude === 'number') ? c.latitude.toFixed(6) : '');
+            $('#dcJLng').val((typeof c.longitude === 'number') ? c.longitude.toFixed(6) : '');
+            $('#dcJAcc').val((typeof c.accuracy === 'number') ? c.accuracy.toFixed(1) : '');
+            actualizarGeoPodTexto();
+        }, function(err) {
+            $('#dcJGeoTxt').text('No fue posible capturar ubicacion.');
+            notificar('warning', 'Geolocalizacion', (err && err.message) ? err.message : 'No se pudo obtener ubicacion.');
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    }
+
+    function previewFotoPod() {
+        var input = document.getElementById('dcJFoto');
+        var img = document.getElementById('dcJFotoPreview');
+        if (!input || !img) {
+            return;
+        }
+        var file = (input.files && input.files.length) ? input.files[0] : null;
+        if (!file) {
+            img.style.display = 'none';
+            img.removeAttribute('src');
+            return;
+        }
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            img.src = (e && e.target) ? (e.target.result || '') : '';
+            img.style.display = img.src ? 'block' : 'none';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function actualizarModalEstadoEntrega() {
+        var estado = String($('#dcJEstado').val() || 'ENTREGADO').toUpperCase();
+        var requiereObs = estado !== 'ENTREGADO';
+        var podObligatorio = estado === 'ENTREGADO';
+        if (requiereObs) {
+            $('#dcJTexto').attr('required', 'required').attr('placeholder', 'Obligatoria para este estado');
+            $('#dcJTextoAyuda').text('Para ' + estado.replace('_', ' ') + ' la justificacion es obligatoria.');
+        } else {
+            $('#dcJTexto').removeAttr('required').attr('placeholder', 'Opcional para ENTREGADO');
+            $('#dcJTextoAyuda').text('Para ENTREGADO la justificacion es opcional.');
+        }
+
+        if (podObligatorio) {
+            $('#dcJPodWrap').removeClass('border-secondary').addClass('border-primary');
+        } else {
+            $('#dcJPodWrap').removeClass('border-primary').addClass('border-secondary');
+        }
+    }
+
+    function abrirModalEstadoEntrega(idGuia, kardexId, remision) {
         $('#dcJIdGuia').val(idGuia);
         $('#dcJKardexId').val(kardexId);
-        $('#dcJAccion').val(accionNorm);
         $('#dcJRemision').text(remision || '-');
-        $('#dcJTipoEstado').text('Justificacion de ' + tipoTxt);
+        $('#dcJEstado').val('ENTREGADO');
         $('#dcJTexto').val('');
+        resetPodCampos();
+        actualizarModalEstadoEntrega();
         if (modalJustificacion && typeof modalJustificacion.show === 'function') {
             modalJustificacion.show();
         } else {
@@ -761,37 +1125,99 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
         }
     }
 
+    function confirmarGuardadoEstado(callback) {
+        if (typeof Swal !== 'undefined' && Swal.fire) {
+            Swal.fire({
+                icon: 'question',
+                title: 'Confirmar registro',
+                text: 'Luego de guardar no podras cambiar este estado de entrega. Deseas continuar?',
+                showCancelButton: true,
+                confirmButtonText: 'Si, guardar',
+                cancelButtonText: 'Cancelar'
+            }).then(function(result) {
+                callback(!!(result && result.isConfirmed));
+            });
+            return;
+        }
+        callback(window.confirm('Luego de guardar no podras cambiar este estado de entrega. Deseas continuar?'));
+    }
+
     function guardarJustificacion() {
         var idGuia = $('#dcJIdGuia').val();
         var kardexId = $('#dcJKardexId').val();
+        var estadoEntrega = String($('#dcJEstado').val() || 'ENTREGADO').toUpperCase();
         var texto = $('#dcJTexto').val();
-        var accion = $('#dcJAccion').val() || 'justificar_no_entregado';
+        var latitud = String($('#dcJLat').val() || '').trim();
+        var longitud = String($('#dcJLng').val() || '').trim();
+        var precisionGps = String($('#dcJAcc').val() || '').trim();
+        var firma = firmaDataUrl();
+        var fotoInput = document.getElementById('dcJFoto');
+        var fotoFile = (fotoInput && fotoInput.files && fotoInput.files.length) ? fotoInput.files[0] : null;
 
-        $.ajax({
-            url: 'despachos_conductor_ajax.php',
-            type: 'POST',
-            dataType: 'json',
-            data: {
-                action: accion,
-                id_guia: idGuia,
-                kardex_id: kardexId,
-                observacion: texto
-            },
-            success: function(resp) {
-                if (!resp || !resp.ok) {
-                    notificar('error', 'No se pudo guardar', (resp && resp.message) ? resp.message : 'Error guardando justificacion.');
-                    return;
-                }
-                if (modalJustificacion && typeof modalJustificacion.hide === 'function') {
-                    modalJustificacion.hide();
-                } else {
-                    $('#dcModalJustificar').hide();
-                }
-                cargarGuias();
-            },
-            error: function(xhr) {
-                notificar('error', 'Error', 'Error de comunicacion. ' + (xhr && xhr.responseText ? xhr.responseText : ''));
+        if (estadoEntrega !== 'ENTREGADO' && String(texto || '').trim() === '') {
+            notificar('warning', 'Justificacion requerida', 'Debes ingresar una justificacion para este estado.');
+            return;
+        }
+
+        if (estadoEntrega === 'ENTREGADO') {
+            if (!fotoFile) {
+                notificar('warning', 'POD requerido', 'Debes adjuntar una foto de entrega.');
+                return;
             }
+            if (!firma) {
+                notificar('warning', 'POD requerido', 'Debes registrar la firma del receptor.');
+                return;
+            }
+            if (!latitud || !longitud) {
+                notificar('warning', 'POD requerido', 'Debes capturar geolocalizacion para ENTREGADO.');
+                return;
+            }
+        }
+
+        confirmarGuardadoEstado(function(aceptado) {
+            if (!aceptado) {
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append('action', 'guardar_estado_entrega');
+            formData.append('id_guia', idGuia);
+            formData.append('kardex_id', kardexId);
+            formData.append('estado_entrega', estadoEntrega);
+            formData.append('observacion', texto || '');
+            formData.append('latitud', latitud);
+            formData.append('longitud', longitud);
+            formData.append('precision_gps', precisionGps);
+            if (firma) {
+                formData.append('firma_data', firma);
+            }
+            if (fotoFile) {
+                formData.append('foto', fotoFile);
+            }
+
+            $.ajax({
+                url: 'despachos_conductor_ajax.php',
+                type: 'POST',
+                dataType: 'json',
+                processData: false,
+                contentType: false,
+                data: formData,
+                success: function(resp) {
+                    if (!resp || !resp.ok) {
+                        notificar('error', 'No se pudo guardar', (resp && resp.message) ? resp.message : 'Error guardando estado.');
+                        return;
+                    }
+                    if (modalJustificacion && typeof modalJustificacion.hide === 'function') {
+                        modalJustificacion.hide();
+                    } else {
+                        $('#dcModalJustificar').hide();
+                    }
+                    cargarGuias();
+                },
+                error: function(xhr) {
+                    notificar('error', 'Error', 'Error de comunicacion. ' + (xhr && xhr.responseText ? xhr.responseText : ''));
+                }
+            });
         });
     }
 
@@ -885,9 +1311,27 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
             modalChat = new bootstrap.Modal(document.getElementById('dcModalChat'));
         }
 
+        initFirmaPad();
+
+        bloquearPullToRefreshMovil();
+        actualizarModoGuiasUI();
+
         $('#dcBtnActualizar').on('click', cargarGuias);
+        $('#dcBtnResetFiltros').on('click', resetFiltrosConductor);
+        $('#dcFiltroEstadoGuia').on('change', function() {
+            var estadoGuia = estadoGuiaFiltro();
+            var estadoRem = String($('#dcFiltroEstadoRemision').val() || 'PENDIENTE').toUpperCase();
+            if (estadoGuia === 'ENTREGADAS' && estadoRem === 'PENDIENTE') {
+                $('#dcFiltroEstadoRemision').val('TODOS');
+            }
+            cargarGuias();
+        });
         $('#dcGuiaSelect').on('change', cargarRemisiones);
         $('#dcFiltroEstadoRemision').on('change', aplicarFiltroRemisiones);
+        $('#dcJEstado').on('change', actualizarModalEstadoEntrega);
+        $('#dcBtnLimpiarFirma').on('click', limpiarFirmaPad);
+        $('#dcBtnGeo').on('click', capturarGeolocalizacionPod);
+        $('#dcJFoto').on('change', previewFotoPod);
 
         $('#dcBtnGuardarJustificacion').on('click', guardarJustificacion);
         $('#dcBtnEnviarChat').on('click', enviarChat);
@@ -898,16 +1342,8 @@ $usuarioActual = isset($_SESSION['user']) ? strtoupper(trim((string)$_SESSION['u
             }
         });
 
-        $(document).on('click', '.dc-btn-entregado', function() {
-            marcarEntregado($(this).data('id-guia'), $(this).data('kardex-id'));
-        });
-
-        $(document).on('click', '.dc-btn-justificar', function() {
-            abrirJustificacion($(this).data('id-guia'), $(this).data('kardex-id'), $(this).data('remision'), 'justificar_no_entregado', 'NO ENTREGADO');
-        });
-
-        $(document).on('click', '.dc-btn-parcial', function() {
-            abrirJustificacion($(this).data('id-guia'), $(this).data('kardex-id'), $(this).data('remision'), 'justificar_parcial', 'ENTREGA PARCIAL');
+        $(document).on('click', '.dc-btn-gestionar', function() {
+            abrirModalEstadoEntrega($(this).data('id-guia'), $(this).data('kardex-id'), $(this).data('remision'));
         });
 
         $(document).on('click', '.dc-btn-chat', function() {

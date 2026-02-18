@@ -4,6 +4,7 @@ require('conecta.php');
 $usuarioActual = isset($_SESSION['user']) ? $_SESSION['user'] : '';
 $prefijos = array();
 $conductores = array();
+$vehiculos = array();
 
 $vsqlPrefijos = "SELECT CODPREFIJO, DESPREFIJO FROM PREFIJO ORDER BY CODPREFIJO";
 if ($vcPrefijos = $conect_bd_actual->consulta($vsqlPrefijos)) {
@@ -19,8 +20,25 @@ if ($vcConductores = $conect_bd_actual->consulta($vsqlConductores)) {
     }
 }
 
+$existeVehiculo = false;
+$vsqlExisteVehiculo = "SELECT COUNT(*) AS TOTAL FROM RDB\$RELATIONS WHERE RDB\$RELATION_NAME = 'VEHICULO'";
+if ($vcExisteVehiculo = $conect_bd_actual->consulta($vsqlExisteVehiculo)) {
+    if ($vrExisteVehiculo = ibase_fetch_object($vcExisteVehiculo)) {
+        $existeVehiculo = ((int)$vrExisteVehiculo->TOTAL) > 0;
+    }
+}
+
+if ($existeVehiculo) {
+    $vsqlVehiculos = "SELECT VEHICULOID, PLACA FROM VEHICULO WHERE COALESCE(SUSPENDIDO, 'N') <> 'S' ORDER BY PLACA";
+    if ($vcVehiculos = $conect_bd_actual->consulta($vsqlVehiculos)) {
+        while ($vrVehiculo = ibase_fetch_object($vcVehiculos)) {
+            $vehiculos[] = $vrVehiculo;
+        }
+    }
+}
+
 $fechaDesdeDefault = date('Y-m-01\\T00:00');
-$fechaHastaDefault = date('Y-m-d\\TH:i');
+$fechaHastaDefault = date('Y-m-d\\T23:59');
 ?>
 <!DOCTYPE html>
 <html lang="es" dir="ltr">
@@ -36,7 +54,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             font-size: 0.94rem;
         }
         .guias-shell {
-            max-width: 1500px;
+            max-width: 1720px;
             margin: 0 auto;
         }
         .guias-card {
@@ -84,7 +102,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
         }
         #tablaGuias {
             margin: 0;
-            min-width: 1100px;
+            min-width: 1240px;
         }
         #tablaGuias thead th {
             position: sticky;
@@ -176,7 +194,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
         .tabla-rem-wrap {
             border: 1px solid #d9e7f3;
             border-radius: 8px;
-            max-height: 230px;
+            max-height: 380px;
             overflow: auto;
         }
         .tabla-rem-wrap table {
@@ -190,6 +208,68 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             font-size: 0.76rem;
             text-transform: uppercase;
             background: #edf4fb;
+        }
+        .modal-remisiones-wide .modal-dialog {
+            width: min(1360px, 94vw);
+            max-width: min(1360px, 94vw);
+            margin: 0.75rem auto;
+        }
+        .modal-remisiones-wide .modal-body {
+            padding-top: 0.85rem;
+        }
+        .filtros-candidatas .form-label {
+            font-size: 0.75rem;
+            margin-bottom: 0.2rem;
+            color: #35566f;
+            font-weight: 600;
+        }
+        .filtros-candidatas .form-control,
+        .filtros-candidatas .form-select {
+            font-size: 0.82rem;
+        }
+        #r_zonas {
+            min-height: 74px;
+        }
+        .estado-catalogo-wrap {
+            border: 1px solid #d9e7f4;
+            border-radius: 10px;
+            max-height: 260px;
+            overflow: auto;
+        }
+        .estado-catalogo-wrap table {
+            margin: 0;
+            font-size: 0.82rem;
+        }
+        .estado-catalogo-wrap thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .badge-uso {
+            padding: 0.25rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            display: inline-block;
+        }
+        .badge-uso.si {
+            background: #fff2c7;
+            color: #6d5604;
+        }
+        .badge-uso.no {
+            background: #d7f4e6;
+            color: #0f6a3b;
+        }
+        @media (min-width: 1200px) {
+            .remisiones-grid {
+                grid-template-columns: 0.78fr 2.22fr;
+                align-items: start;
+            }
+        }
+        @media (max-width: 1366px) {
+            .remisiones-grid {
+                grid-template-columns: 1fr;
+            }
         }
         @media (max-width: 992px) {
             .guias-table-container {
@@ -233,9 +313,6 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                     <label class="form-label mb-1" for="f_estado">Estado</label>
                     <select id="f_estado" class="form-select">
                         <option value="">Todos</option>
-                        <option value="EN_ALISTAMIENTO">EN ALISTAMIENTO</option>
-                        <option value="EN_RUTA">EN RUTA</option>
-                        <option value="FINALIZADO">FINALIZADO</option>
                     </select>
                 </div>
                 <div class="col-12 col-md-3">
@@ -259,16 +336,17 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                         <th>Fecha guia</th>
                         <th>Estado</th>
                         <th>Conductor</th>
+                        <th>Vehiculo</th>
                         <th class="text-end">Remisiones</th>
                         <th class="text-end">Peso</th>
-                        <th class="text-end">Valor base</th>
-                        <th>Usuario crea</th>
+                        <th class="text-end">$BASE</th>
+                        <th>CREÓ</th>
                         <th class="text-center">Imprimir</th>
                         <th>Acciones</th>
                     </tr>
                     </thead>
                     <tbody id="cuerpoGuias">
-                    <tr><td colspan="10" class="guias-empty">Cargando guias...</td></tr>
+                    <tr><td colspan="11" class="guias-empty">Cargando guias...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -297,8 +375,8 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                         </select>
                     </div>
                     <div class="col-12 col-md-4">
-                        <label class="form-label" for="n_fecha_guia">Fecha y hora guia</label>
-                        <input type="datetime-local" id="n_fecha_guia" class="form-control" value="<?php echo $fechaHastaDefault; ?>">
+                        <label class="form-label" for="n_fecha_info">Fecha y hora guia</label>
+                        <input type="text" id="n_fecha_info" class="form-control" value="Se asigna automaticamente al guardar" readonly>
                     </div>
                     <div class="col-12 col-md-5">
                         <label class="form-label" for="n_conductor">Conductor</label>
@@ -307,6 +385,17 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                             <?php foreach ($conductores as $conductor): ?>
                                 <option value="<?php echo (int)$conductor->TERID; ?>">
                                     <?php echo htmlspecialchars(trim((string)$conductor->NOMBRE) . ' (' . trim((string)$conductor->NIT) . ')'); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-5">
+                        <label class="form-label" for="n_vehiculo">Vehiculo (placa)</label>
+                        <select id="n_vehiculo" class="form-select">
+                            <option value="">Sin vehiculo</option>
+                            <?php foreach ($vehiculos as $vehiculo): ?>
+                                <option value="<?php echo (int)$vehiculo->VEHICULOID; ?>">
+                                    <?php echo htmlspecialchars(trim((string)$vehiculo->PLACA)); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -348,16 +437,27 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                         <input type="text" id="u_consecutivo" class="form-control" readonly>
                     </div>
                     <div class="col-12 col-md-6">
-                        <label class="form-label" for="u_fecha_guia">Fecha y hora guia</label>
-                        <input type="datetime-local" id="u_fecha_guia" class="form-control">
+                        <label class="form-label" for="u_fecha_guia_info">Fecha y hora guia</label>
+                        <input type="text" id="u_fecha_guia_info" class="form-control" readonly>
                     </div>
-                    <div class="col-12">
+                    <div class="col-12 col-md-6">
                         <label class="form-label" for="u_conductor">Conductor</label>
                         <select id="u_conductor" class="form-select">
                             <option value="">Sin conductor</option>
                             <?php foreach ($conductores as $conductor): ?>
                                 <option value="<?php echo (int)$conductor->TERID; ?>">
                                     <?php echo htmlspecialchars(trim((string)$conductor->NOMBRE) . ' (' . trim((string)$conductor->NIT) . ')'); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="u_vehiculo">Vehiculo (placa)</label>
+                        <select id="u_vehiculo" class="form-select">
+                            <option value="">Sin vehiculo</option>
+                            <?php foreach ($vehiculos as $vehiculo): ?>
+                                <option value="<?php echo (int)$vehiculo->VEHICULOID; ?>">
+                                    <?php echo htmlspecialchars(trim((string)$vehiculo->PLACA)); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -376,7 +476,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
     </div>
 </div>
 
-<div class="modal fade" id="modalRemisionesGuia" tabindex="-1" aria-hidden="true">
+<div class="modal fade modal-remisiones-wide" id="modalRemisionesGuia" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -385,9 +485,11 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             </div>
             <div class="modal-body">
                 <input type="hidden" id="r_id_guia" value="0">
+                <input type="hidden" id="r_estado_guia" value="">
                 <div class="alert alert-light border d-flex flex-wrap align-items-center gap-2 py-2 mb-3">
                     <span class="estado-quick"><i class="fas fa-hashtag"></i> <strong id="r_num_guia">-</strong></span>
                     <span class="ms-md-3 estado-quick"><i class="fas fa-boxes-stacked"></i> Remisiones: <strong id="r_total_remisiones">0</strong></span>
+                    <span class="ms-md-3 estado-quick"><i class="fas fa-tag"></i> Estado: <strong id="r_estado_guia_txt">-</strong></span>
                 </div>
 
                 <div class="remisiones-grid">
@@ -402,11 +504,12 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                                     <th>Cliente</th>
                                     <th class="text-end">Peso</th>
                                     <th class="text-end">Valor base</th>
+                                    <th class="text-center">Cliente PDF</th>
                                     <th class="text-center">Quitar</th>
                                 </tr>
                                 </thead>
                                 <tbody id="cuerpoRemisionesGuia">
-                                <tr><td colspan="6" class="text-center py-3 text-muted">Sin datos</td></tr>
+                                <tr><td colspan="7" class="text-center py-3 text-muted">Sin datos</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -414,17 +517,34 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
 
                     <section class="remisiones-box">
                         <h6><i class="fas fa-magnifying-glass"></i> Agregar remisiones (CODCOMP='RS')</h6>
-                        <div class="row g-2 mb-2">
-                            <div class="col-12 col-md-4">
+                        <div class="row g-2 mb-2 filtros-candidatas">
+                            <div class="col-12 col-lg-3">
+                                <label class="form-label" for="r_busqueda">Buscar</label>
                                 <input type="text" id="r_busqueda" class="form-control form-control-sm" placeholder="Buscar remision, cliente o vendedor">
                             </div>
-                            <div class="col-6 col-md-3">
+                            <div class="col-6 col-lg-1">
+                                <label class="form-label" for="r_prefijo">Prefijo</label>
+                                <select id="r_prefijo" class="form-select form-select-sm">
+                                    <option value="todos">Todos</option>
+                                    <option value="00">00</option>
+                                    <option value="01">01</option>
+                                    <option value="50">50</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-lg-3">
+                                <label class="form-label" for="r_zonas">Zona (multiple)</label>
+                                <select id="r_zonas" class="form-select form-select-sm" multiple></select>
+                            </div>
+                            <div class="col-6 col-lg-2">
+                                <label class="form-label" for="r_fecha_desde">Fecha desde</label>
                                 <input type="date" id="r_fecha_desde" class="form-control form-control-sm">
                             </div>
-                            <div class="col-6 col-md-3">
+                            <div class="col-6 col-lg-2">
+                                <label class="form-label" for="r_fecha_hasta">Fecha hasta</label>
                                 <input type="date" id="r_fecha_hasta" class="form-control form-control-sm">
                             </div>
-                            <div class="col-12 col-md-2 d-grid">
+                            <div class="col-12 col-lg-1 d-grid">
+                                <label class="form-label d-none d-lg-block">&nbsp;</label>
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="btnBuscarCandidatasRem">
                                     <i class="fas fa-filter"></i> Filtrar
                                 </button>
@@ -437,6 +557,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                                     <th>Remision</th>
                                     <th>Fecha</th>
                                     <th>Cliente</th>
+                                    <th>Zona</th>
                                     <th>Vendedor</th>
                                     <th class="text-end">Peso</th>
                                     <th class="text-end">Valor</th>
@@ -445,7 +566,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                                 </tr>
                                 </thead>
                                 <tbody id="cuerpoCandidatasRem">
-                                <tr><td colspan="8" class="text-center py-3 text-muted">Sin datos</td></tr>
+                                <tr><td colspan="9" class="text-center py-3 text-muted">Sin datos</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -475,8 +596,6 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                         <label class="form-label" for="e_estado">Nuevo estado</label>
                         <select id="e_estado" class="form-select">
                             <option value="EN_ALISTAMIENTO">EN ALISTAMIENTO</option>
-                            <option value="EN_RUTA">EN RUTA</option>
-                            <option value="FINALIZADO">FINALIZADO</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-7">
@@ -485,10 +604,51 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-end mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefrescarCatalogoEstados">
+                        <i class="fas fa-rotate"></i> Refrescar catalogo
+                    </button>
                     <button type="button" class="btn btn-primary" id="btnCambiarEstado">
                         <i class="fas fa-check"></i> Aplicar cambio
                     </button>
+                </div>
+
+                <div class="border rounded-3 p-2 mb-3 bg-light">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong><i class="fas fa-sliders"></i> Catalogo de estados</strong>
+                        <small class="text-muted">No se permite editar/eliminar estados en uso</small>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-12 col-md-3">
+                            <input type="text" id="cfg_estado_codigo" class="form-control form-control-sm" maxlength="30" placeholder="Codigo (EJ: EN_PATIO)">
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <input type="text" id="cfg_estado_nombre" class="form-control form-control-sm" maxlength="60" placeholder="Nombre visible">
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <input type="number" id="cfg_estado_orden" class="form-control form-control-sm" value="40" min="0" step="1">
+                        </div>
+                        <div class="col-6 col-md-2 d-grid">
+                            <button type="button" class="btn btn-sm btn-success" id="btnAgregarEstadoCfg">
+                                <i class="fas fa-plus"></i> Agregar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="estado-catalogo-wrap">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-dark">
+                            <tr>
+                                <th>Codigo</th>
+                                <th>Nombre</th>
+                                <th class="text-center">Uso</th>
+                                <th class="text-center">Acciones</th>
+                            </tr>
+                            </thead>
+                            <tbody id="cuerpoCatalogoEstados">
+                            <tr><td colspan="4" class="text-center text-muted py-2">Cargando catalogo...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div class="historial-wrap">
@@ -517,6 +677,8 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
     var modalEditarGuia = null;
     var modalRemisionesGuia = null;
     var modalEstados = null;
+    var catalogoEstados = [];
+    var usaCatalogoEstadosDb = false;
 
     function abrirModal(modal) {
         if (modal && typeof modal.show === 'function') {
@@ -564,6 +726,39 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
         });
     }
 
+    function formatearFechaSolo(fechaIso) {
+        if (!fechaIso) {
+            return '';
+        }
+
+        var txt = String(fechaIso).trim();
+        var soloFecha = txt.split(' ')[0];
+        var candidata = soloFecha;
+        if (soloFecha.indexOf('T') !== -1) {
+            candidata = soloFecha.split('T')[0];
+        }
+
+        var fecha = new Date(candidata + 'T00:00:00');
+        if (!isNaN(fecha.getTime())) {
+            return fecha.toLocaleDateString('es-CO', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+        }
+
+        fecha = new Date(txt.replace(' ', 'T'));
+        if (!isNaN(fecha.getTime())) {
+            return fecha.toLocaleDateString('es-CO', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+        }
+
+        return candidata || txt;
+    }
+
     function fechaInputLocal(fechaIso) {
         if (!fechaIso) {
             return '';
@@ -591,13 +786,52 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             .replace(/'/g, '&#039;');
     }
 
+    function telefonoSoloDigitos(tel) {
+        return String(tel || '').replace(/[^0-9]/g, '');
+    }
+
+    function estadoPermiteEnvioPdf(estado) {
+        var e = normalizarCodigoEstado(estado || '');
+        return (e === 'EN_ALISTAMIENTO' || e === 'EN_RUTA');
+    }
+
+    function urlPdfRemision(kardexId, token) {
+        var base = 'remision_entrega_pdf.php?kardex_id=' + encodeURIComponent(kardexId) + '&t=' + encodeURIComponent(token || '');
+        try {
+            return new URL(base, window.location.href).href;
+        } catch (e) {
+            return base;
+        }
+    }
+
+    function urlWhatsappPdfRemision(telefono, remision, urlPdf) {
+        var tel = telefonoSoloDigitos(telefono);
+        if (!tel) {
+            return '';
+        }
+        if (tel.length === 10) {
+            tel = '57' + tel;
+        }
+        var msg = 'Compartimos el PDF de la remision ' + (remision || '') + ': ' + (urlPdf || '');
+        return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(msg);
+    }
+
+    function normalizarCodigoEstado(estado) {
+        var codigo = String(estado || '').trim().toUpperCase();
+        if (codigo === 'FINALIZADO') {
+            return 'ENTREGADO';
+        }
+        return codigo;
+    }
+
     function claseEstado(estado) {
-        switch (estado) {
+        var e = normalizarCodigoEstado(estado);
+        switch (e) {
             case 'EN_ALISTAMIENTO':
                 return 'ali';
             case 'EN_RUTA':
                 return 'rut';
-            case 'FINALIZADO':
+            case 'ENTREGADO':
                 return 'fin';
             default:
                 return 'nd';
@@ -605,29 +839,120 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
     }
 
     function etiquetaEstado(estado) {
-        switch (estado) {
-            case 'EN_ALISTAMIENTO':
-                return 'EN ALISTAMIENTO';
-            case 'EN_RUTA':
-                return 'EN RUTA';
-            case 'FINALIZADO':
-                return 'FINALIZADO';
-            default:
-                return estado || 'SIN ESTADO';
+        var e = normalizarCodigoEstado(estado);
+        for (var i = 0; i < catalogoEstados.length; i++) {
+            if (normalizarCodigoEstado(catalogoEstados[i].codigo) === e) {
+                return catalogoEstados[i].nombre || e.replace(/_/g, ' ');
+            }
         }
+        if (e === 'EN_ALISTAMIENTO') return 'EN ALISTAMIENTO';
+        if (e === 'EN_RUTA') return 'EN RUTA';
+        if (e === 'ENTREGADO') return 'ENTREGADO';
+        return e || 'SIN ESTADO';
+    }
+
+    function renderCatalogoEstadosTabla() {
+        var $body = $('#cuerpoCatalogoEstados');
+        if (!$body.length) {
+            return;
+        }
+        if (!catalogoEstados.length) {
+            $body.html('<tr><td colspan="4" class="text-center text-muted py-2">Sin estados configurados.</td></tr>');
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < catalogoEstados.length; i++) {
+            var st = catalogoEstados[i];
+            var enUso = Number(st.en_uso || 0) > 0;
+            var usoClass = enUso ? 'si' : 'no';
+            var usoText = enUso ? 'EN USO' : 'LIBRE';
+            var id = Number(st.id || 0);
+            var btnEdit = usaCatalogoEstadosDb ? '<button type="button" class="btn btn-sm btn-outline-secondary btn-editar-estado-cfg" data-id="' + id + '" ' + (enUso ? 'disabled' : '') + '><i class="fas fa-pen"></i></button>' : '';
+            var btnDel = usaCatalogoEstadosDb ? '<button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-estado-cfg" data-id="' + id + '" ' + (enUso ? 'disabled' : '') + '><i class="fas fa-trash"></i></button>' : '';
+
+            html += '' +
+                '<tr>' +
+                '<td><strong>' + escapeHtml(st.codigo) + '</strong></td>' +
+                '<td>' + escapeHtml(st.nombre) + '</td>' +
+                '<td class="text-center"><span class="badge-uso ' + usoClass + '">' + usoText + '</span></td>' +
+                '<td class="text-center"><div class="d-inline-flex gap-1">' + btnEdit + btnDel + '</div></td>' +
+                '</tr>';
+        }
+        $body.html(html);
+    }
+
+    function refrescarSelectEstados(estadoActual) {
+        var estadoNorm = normalizarCodigoEstado(estadoActual);
+        var htmlFiltro = '<option value="">Todos</option>';
+        var htmlCambio = '';
+
+        for (var i = 0; i < catalogoEstados.length; i++) {
+            var st = catalogoEstados[i];
+            if (String(st.activo || 'S').toUpperCase() === 'N') {
+                continue;
+            }
+            var codigo = normalizarCodigoEstado(st.codigo);
+            var nombre = st.nombre || codigo.replace(/_/g, ' ');
+            htmlFiltro += '<option value="' + escapeHtml(codigo) + '">' + escapeHtml(nombre) + '</option>';
+            htmlCambio += '<option value="' + escapeHtml(codigo) + '">' + escapeHtml(nombre) + '</option>';
+        }
+
+        $('#f_estado').html(htmlFiltro);
+        $('#e_estado').html(htmlCambio);
+
+        if (estadoNorm) {
+            $('#e_estado').val(estadoNorm);
+            $('#f_estado').val(estadoNorm);
+        }
+    }
+
+    function cargarCatalogoEstados(callback, estadoActual) {
+        $.ajax({
+            url: 'guias_despachos_ajax.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'listar_estados_catalogo',
+                solo_activos: 'N'
+            },
+            success: function(resp) {
+                if (!resp || !resp.ok) {
+                    notificar('error', 'Catalogo de estados', (resp && resp.message) ? resp.message : 'No fue posible cargar el catalogo.');
+                    if (typeof callback === 'function') {
+                        callback(false);
+                    }
+                    return;
+                }
+
+                usaCatalogoEstadosDb = Number(resp.usa_catalogo_db || 0) > 0;
+                catalogoEstados = resp.data || [];
+                refrescarSelectEstados(estadoActual || '');
+                renderCatalogoEstadosTabla();
+                if (typeof callback === 'function') {
+                    callback(true);
+                }
+            },
+            error: function() {
+                notificar('error', 'Catalogo de estados', 'Error de comunicacion al cargar catalogo.');
+                if (typeof callback === 'function') {
+                    callback(false);
+                }
+            }
+        });
     }
 
     function renderGuias(items) {
         var $cuerpo = $('#cuerpoGuias');
         if (!items || !items.length) {
-            $cuerpo.html('<tr><td colspan="10" class="guias-empty">No hay guias para los filtros seleccionados.</td></tr>');
+            $cuerpo.html('<tr><td colspan="11" class="guias-empty">No hay guias para los filtros seleccionados.</td></tr>');
             return;
         }
 
         var html = '';
         for (var i = 0; i < items.length; i++) {
             var item = items[i];
-            var estado = item.estado_actual || '';
+            var estado = normalizarCodigoEstado(item.estado_actual || '');
             var numeroGuia = (item.prefijo || '') + '-' + (item.consecutivo || '');
             html += '' +
                 '<tr>' +
@@ -635,6 +960,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                 '<td>' + formatearFecha(item.fecha_guia) + '</td>' +
                 '<td><span class="badge-estado ' + claseEstado(estado) + '">' + etiquetaEstado(estado) + '</span></td>' +
                 '<td>' + (item.conductor || '') + '</td>' +
+                '<td>' + escapeHtml(item.placa_vehiculo || '') + '</td>' +
                 '<td class="text-end">' + formatearNumero(item.total_remisiones, 0) + '</td>' +
                 '<td class="text-end">' + formatearNumero(item.total_peso, 0) + '</td>' +
                 '<td class="text-end">$ ' + formatearNumero(item.total_valor_base, 0) + '</td>' +
@@ -646,17 +972,17 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                 '</td>' +
                 '<td>' +
                 '   <div class="acciones-guia">' +
-                '      <button type="button" class="btn btn-sm btn-outline-success btn-remisiones" data-id="' + item.id + '" data-num="' + numeroGuia + '">' +
+                '      <button type="button" class="btn btn-sm btn-outline-success btn-remisiones" data-id="' + item.id + '" data-num="' + numeroGuia + '" data-estado="' + estado + '">' +
                 '          <i class="fas fa-file-circle-plus"></i> Remisiones' +
                 '      </button>' +
-                '      <button type="button" class="btn btn-sm btn-outline-secondary btn-editar-guia" data-id="' + item.id + '">' +
-                '          <i class="fas fa-pen"></i> Editar' +
+                '      <button type="button" class="btn btn-sm btn-outline-secondary btn-editar-guia" data-id="' + item.id + '" title="Editar guia">' +
+                '          <i class="fas fa-pen"></i>' +
                 '      </button>' +
                 '      <button type="button" class="btn btn-sm btn-outline-primary btn-estado" data-id="' + item.id + '" data-num="' + numeroGuia + '" data-estado="' + estado + '">' +
                 '          <i class="fas fa-route"></i> Estados' +
                 '      </button>' +
-                '      <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-guia" data-id="' + item.id + '" data-num="' + numeroGuia + '">' +
-                '          <i class="fas fa-trash"></i> Eliminar' +
+                '      <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-guia" data-id="' + item.id + '" data-num="' + numeroGuia + '" title="Eliminar guia">' +
+                '          <i class="fas fa-trash"></i>' +
                 '      </button>' +
                 '   </div>' +
                 '</td>' +
@@ -674,7 +1000,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             busqueda: $('#f_busqueda').val()
         };
 
-        $('#cuerpoGuias').html('<tr><td colspan="10" class="guias-empty">Consultando informacion...</td></tr>');
+        $('#cuerpoGuias').html('<tr><td colspan="11" class="guias-empty">Consultando informacion...</td></tr>');
 
         $.ajax({
             url: 'guias_despachos_ajax.php',
@@ -684,22 +1010,22 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             success: function(resp) {
                 if (!resp || !resp.ok) {
                     var msg = (resp && resp.message) ? resp.message : 'No fue posible cargar las guias.';
-                    $('#cuerpoGuias').html('<tr><td colspan="10" class="guias-empty">' + msg + '</td></tr>');
+                    $('#cuerpoGuias').html('<tr><td colspan="11" class="guias-empty">' + msg + '</td></tr>');
                     return;
                 }
                 renderGuias(resp.data || []);
             },
             error: function(xhr) {
                 var texto = xhr && xhr.responseText ? xhr.responseText : '';
-                $('#cuerpoGuias').html('<tr><td colspan="10" class="guias-empty">Error de comunicacion con el modulo. ' + texto + '</td></tr>');
+                $('#cuerpoGuias').html('<tr><td colspan="11" class="guias-empty">Error de comunicacion con el modulo. ' + texto + '</td></tr>');
             }
         });
     }
 
     function limpiarFormularioGuia() {
         $('#n_prefijo').val('');
-        $('#n_fecha_guia').val('<?php echo $fechaHastaDefault; ?>');
         $('#n_conductor').val('');
+        $('#n_vehiculo').val('');
         $('#n_observacion').val('');
     }
 
@@ -707,17 +1033,13 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
         var payload = {
             action: 'crear_guia',
             prefijo: $('#n_prefijo').val(),
-            fecha_guia: $('#n_fecha_guia').val(),
             id_conductor: $('#n_conductor').val(),
+            id_vehiculo: $('#n_vehiculo').val(),
             observacion: $('#n_observacion').val()
         };
 
         if (!payload.prefijo) {
             notificar('warning', 'Prefijo requerido', 'Selecciona un prefijo para la guia.');
-            return;
-        }
-        if (!payload.fecha_guia) {
-            notificar('warning', 'Fecha requerida', 'Selecciona fecha y hora de la guia.');
             return;
         }
 
@@ -762,8 +1084,9 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                 $('#u_id_guia').val(g.id);
                 $('#u_prefijo').val(g.prefijo || '');
                 $('#u_consecutivo').val(g.consecutivo || '');
-                $('#u_fecha_guia').val(fechaInputLocal(g.fecha_guia));
+                $('#u_fecha_guia_info').val(formatearFecha(g.fecha_guia));
                 $('#u_conductor').val(g.id_conductor ? String(g.id_conductor) : '');
+                $('#u_vehiculo').val(g.id_vehiculo ? String(g.id_vehiculo) : '');
                 abrirModal(modalEditarGuia);
             },
             error: function() {
@@ -776,16 +1099,12 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
         var payload = {
             action: 'actualizar_guia',
             id_guia: $('#u_id_guia').val(),
-            fecha_guia: $('#u_fecha_guia').val(),
-            id_conductor: $('#u_conductor').val()
+            id_conductor: $('#u_conductor').val(),
+            id_vehiculo: $('#u_vehiculo').val()
         };
 
         if (!payload.id_guia || payload.id_guia === '0') {
             notificar('warning', 'Guia invalida', 'No se encontro la guia seleccionada.');
-            return;
-        }
-        if (!payload.fecha_guia) {
-            notificar('warning', 'Fecha requerida', 'La fecha y hora de la guia es obligatoria.');
             return;
         }
 
@@ -810,7 +1129,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
     }
 
     function cargarDetalleRemisiones(idGuia) {
-        $('#cuerpoRemisionesGuia').html('<tr><td colspan="6" class="text-center py-3 text-muted">Consultando remisiones...</td></tr>');
+        $('#cuerpoRemisionesGuia').html('<tr><td colspan="7" class="text-center py-3 text-muted">Consultando remisiones...</td></tr>');
 
         $.ajax({
             url: 'guias_despachos_ajax.php',
@@ -822,41 +1141,103 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             },
             success: function(resp) {
                 if (!resp || !resp.ok) {
-                    $('#cuerpoRemisionesGuia').html('<tr><td colspan="6" class="text-center py-3 text-muted">' + ((resp && resp.message) ? escapeHtml(resp.message) : 'No fue posible cargar el detalle.') + '</td></tr>');
+                    $('#cuerpoRemisionesGuia').html('<tr><td colspan="7" class="text-center py-3 text-muted">' + ((resp && resp.message) ? escapeHtml(resp.message) : 'No fue posible cargar el detalle.') + '</td></tr>');
                     return;
                 }
 
                 var rows = resp.data || [];
                 $('#r_total_remisiones').text(rows.length);
+                var estadoGuia = $('#r_estado_guia').val() || '';
+                var permiteEnvio = estadoPermiteEnvioPdf(estadoGuia);
 
                 if (!rows.length) {
-                    $('#cuerpoRemisionesGuia').html('<tr><td colspan="6" class="text-center py-3 text-muted">La guia no tiene remisiones.</td></tr>');
+                    $('#cuerpoRemisionesGuia').html('<tr><td colspan="7" class="text-center py-3 text-muted">La guia no tiene remisiones.</td></tr>');
                     return;
                 }
 
                 var html = '';
                 for (var i = 0; i < rows.length; i++) {
                     var item = rows[i];
+                    var pdfUrl = urlPdfRemision(item.kardex_id, item.token_pdf || '');
+                    var waPdf = urlWhatsappPdfRemision(item.telefono, item.remision, pdfUrl);
+                    var deshabilitarEnvio = !permiteEnvio;
+                    var claseBtn = deshabilitarEnvio ? 'btn-outline-secondary disabled' : 'btn-outline-success';
+                    var claseWsp = deshabilitarEnvio ? 'btn-outline-secondary disabled' : ((waPdf === '') ? 'btn-outline-secondary disabled' : 'btn-outline-primary');
+                    var hrefPdf = deshabilitarEnvio ? '' : ('href="' + escapeHtml(pdfUrl) + '" target="_blank"');
+                    var hrefWsp = (!deshabilitarEnvio && waPdf !== '') ? ('href="' + waPdf + '" target="_blank"') : '';
+
                     html += '' +
                         '<tr>' +
                         '<td>' + escapeHtml(item.remision) + '</td>' +
-                        '<td>' + escapeHtml(formatearFecha(item.fecha_hora)) + '</td>' +
+                        '<td>' + escapeHtml(formatearFechaSolo(item.fecha_hora)) + '</td>' +
                         '<td>' + escapeHtml(item.cliente) + '</td>' +
                         '<td class="text-end">' + formatearNumero(item.peso, 0) + '</td>' +
                         '<td class="text-end">$ ' + formatearNumero(item.valor_base, 0) + '</td>' +
+                        '<td class="text-center">' +
+                            '<div class="d-inline-flex gap-1">' +
+                                '<a class="btn btn-sm ' + claseBtn + '" ' + hrefPdf + ' title="Ver PDF de remision"><i class="fas fa-file-pdf"></i></a>' +
+                                '<a class="btn btn-sm ' + claseWsp + '" ' + hrefWsp + ' title="Enviar PDF al cliente por WhatsApp"><i class="fab fa-whatsapp"></i></a>' +
+                            '</div>' +
+                        '</td>' +
                         '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-quitar-remision" data-kardex="' + item.kardex_id + '"><i class="fas fa-trash"></i></button></td>' +
                         '</tr>';
                 }
                 $('#cuerpoRemisionesGuia').html(html);
             },
             error: function() {
-                $('#cuerpoRemisionesGuia').html('<tr><td colspan="6" class="text-center py-3 text-muted">Error consultando detalle.</td></tr>');
+                $('#cuerpoRemisionesGuia').html('<tr><td colspan="7" class="text-center py-3 text-muted">Error consultando detalle.</td></tr>');
+            }
+        });
+    }
+
+    function cargarZonasCandidatas(callback) {
+        var seleccionActual = $('#r_zonas').val() || [];
+        var prefijo = $('#r_prefijo').val() || 'todos';
+
+        $.ajax({
+            url: 'guias_despachos_ajax.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'listar_zonas_filtro_remision',
+                prefijo: prefijo
+            },
+            success: function(resp) {
+                var zonas = (resp && resp.ok && resp.data) ? resp.data : [];
+                var html = '';
+                var seleccionValidada = [];
+
+                for (var i = 0; i < zonas.length; i++) {
+                    var zona = String(zonas[i] || '').trim();
+                    if (!zona) {
+                        continue;
+                    }
+                    html += '<option value="' + escapeHtml(zona) + '">' + escapeHtml(zona) + '</option>';
+                    if (seleccionActual.indexOf(zona) !== -1) {
+                        seleccionValidada.push(zona);
+                    }
+                }
+
+                $('#r_zonas').html(html);
+                if (seleccionValidada.length) {
+                    $('#r_zonas').val(seleccionValidada);
+                }
+
+                if (typeof callback === 'function') {
+                    callback();
+                }
+            },
+            error: function() {
+                $('#r_zonas').html('');
+                if (typeof callback === 'function') {
+                    callback();
+                }
             }
         });
     }
 
     function cargarCandidatasRemisiones(idGuia) {
-        $('#cuerpoCandidatasRem').html('<tr><td colspan="8" class="text-center py-3 text-muted">Consultando remisiones candidatas...</td></tr>');
+        $('#cuerpoCandidatasRem').html('<tr><td colspan="9" class="text-center py-3 text-muted">Consultando remisiones candidatas...</td></tr>');
 
         $.ajax({
             url: 'guias_despachos_ajax.php',
@@ -867,17 +1248,19 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                 id_guia: idGuia,
                 busqueda: $('#r_busqueda').val(),
                 fecha_desde: $('#r_fecha_desde').val(),
-                fecha_hasta: $('#r_fecha_hasta').val()
+                fecha_hasta: $('#r_fecha_hasta').val(),
+                prefijo: $('#r_prefijo').val(),
+                zonas_json: JSON.stringify($('#r_zonas').val() || [])
             },
             success: function(resp) {
                 if (!resp || !resp.ok) {
-                    $('#cuerpoCandidatasRem').html('<tr><td colspan="8" class="text-center py-3 text-muted">' + ((resp && resp.message) ? escapeHtml(resp.message) : 'No fue posible cargar candidatas.') + '</td></tr>');
+                    $('#cuerpoCandidatasRem').html('<tr><td colspan="9" class="text-center py-3 text-muted">' + ((resp && resp.message) ? escapeHtml(resp.message) : 'No fue posible cargar candidatas.') + '</td></tr>');
                     return;
                 }
 
                 var rows = resp.data || [];
                 if (!rows.length) {
-                    $('#cuerpoCandidatasRem').html('<tr><td colspan="8" class="text-center py-3 text-muted">No hay remisiones para agregar.</td></tr>');
+                    $('#cuerpoCandidatasRem').html('<tr><td colspan="9" class="text-center py-3 text-muted">No hay remisiones para agregar.</td></tr>');
                     return;
                 }
 
@@ -893,8 +1276,9 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                     html += '' +
                         '<tr>' +
                         '<td>' + escapeHtml(item.remision) + '</td>' +
-                        '<td>' + escapeHtml(formatearFecha(item.fecha_hora)) + '</td>' +
+                        '<td>' + escapeHtml(formatearFechaSolo(item.fecha_hora)) + '</td>' +
                         '<td>' + escapeHtml(item.cliente) + '</td>' +
+                        '<td>' + escapeHtml(item.zona || '') + '</td>' +
                         '<td>' + escapeHtml(item.vendedor) + '</td>' +
                         '<td class="text-end">' + formatearNumero(item.peso, 0) + '</td>' +
                         '<td class="text-end">$ ' + formatearNumero(item.valor_base, 0) + '</td>' +
@@ -919,22 +1303,28 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                 if (detalle) {
                     msg += ': ' + detalle;
                 }
-                $('#cuerpoCandidatasRem').html('<tr><td colspan="8" class="text-center py-3 text-muted">' + msg + '</td></tr>');
+                $('#cuerpoCandidatasRem').html('<tr><td colspan="9" class="text-center py-3 text-muted">' + msg + '</td></tr>');
             }
         });
     }
 
-    function abrirModalRemisiones(idGuia, numGuia) {
+    function abrirModalRemisiones(idGuia, numGuia, estadoGuia) {
         $('#r_id_guia').val(idGuia);
         $('#r_num_guia').text(numGuia || '-');
+        $('#r_estado_guia').val(normalizarCodigoEstado(estadoGuia || ''));
+        $('#r_estado_guia_txt').text(etiquetaEstado(normalizarCodigoEstado(estadoGuia || '')));
         $('#r_busqueda').val('');
+        $('#r_prefijo').val('todos');
+        $('#r_zonas').html('');
         var hoy = new Date();
         var desde = new Date();
         desde.setDate(hoy.getDate() - 15);
         $('#r_fecha_desde').val(fechaSoloLocalInput(desde));
         $('#r_fecha_hasta').val(fechaSoloLocalInput(hoy));
         cargarDetalleRemisiones(idGuia);
-        cargarCandidatasRemisiones(idGuia);
+        cargarZonasCandidatas(function() {
+            cargarCandidatasRemisiones(idGuia);
+        });
         abrirModal(modalRemisionesGuia);
     }
 
@@ -1087,11 +1477,16 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
     }
 
     function abrirModalEstados(idGuia, numGuia, estadoActual) {
+        var estadoNorm = normalizarCodigoEstado(estadoActual || 'EN_ALISTAMIENTO');
         $('#e_id_guia').val(idGuia);
         $('#e_num_guia').text(numGuia || '-');
-        $('#e_estado_actual').text(etiquetaEstado(estadoActual));
-        $('#e_estado').val(estadoActual || 'EN_ALISTAMIENTO');
+        $('#e_estado_actual').text(etiquetaEstado(estadoNorm));
+        $('#e_estado').val(estadoNorm);
         $('#e_observacion').val('');
+        $('#cuerpoCatalogoEstados').html('<tr><td colspan="4" class="text-center text-muted py-2">Cargando catalogo...</td></tr>');
+        cargarCatalogoEstados(function() {
+            $('#e_estado').val(estadoNorm);
+        }, estadoNorm);
         cargarHistorial(idGuia);
         abrirModal(modalEstados);
     }
@@ -1120,7 +1515,7 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                     return;
                 }
 
-                $('#e_estado_actual').text(etiquetaEstado(payload.estado));
+                $('#e_estado_actual').text(etiquetaEstado(normalizarCodigoEstado(payload.estado)));
                 $('#e_observacion').val('');
                 notificar('success', 'Estado actualizado', 'El estado de la guia fue actualizado.');
                 cargarHistorial(payload.id_guia);
@@ -1130,6 +1525,200 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
                 notificar('error', 'Error', 'Error de comunicacion al cambiar estado.');
             }
         });
+    }
+
+    function agregarEstadoCatalogo() {
+        var codigo = normalizarCodigoEstado($('#cfg_estado_codigo').val());
+        var nombre = String($('#cfg_estado_nombre').val() || '').trim().toUpperCase();
+        var orden = Number($('#cfg_estado_orden').val() || 0);
+
+        if (!codigo) {
+            notificar('warning', 'Codigo requerido', 'Ingresa el codigo del nuevo estado.');
+            return;
+        }
+
+        $.ajax({
+            url: 'guias_despachos_ajax.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'agregar_estado_catalogo',
+                codigo: codigo,
+                nombre: nombre,
+                orden_visual: orden
+            },
+            success: function(resp) {
+                if (!resp || !resp.ok) {
+                    notificar('error', 'No se pudo agregar', (resp && resp.message) ? resp.message : 'Error agregando estado.');
+                    return;
+                }
+                $('#cfg_estado_codigo').val('');
+                $('#cfg_estado_nombre').val('');
+                $('#cfg_estado_orden').val('40');
+                cargarCatalogoEstados();
+                notificar('success', 'Estado agregado', 'El estado se agrego al catalogo.');
+            },
+            error: function() {
+                notificar('error', 'Error', 'Error de comunicacion al agregar estado.');
+            }
+        });
+    }
+
+    function editarEstadoCatalogo(id) {
+        var estado = null;
+        for (var i = 0; i < catalogoEstados.length; i++) {
+            if (Number(catalogoEstados[i].id) === Number(id)) {
+                estado = catalogoEstados[i];
+                break;
+            }
+        }
+        if (!estado) {
+            notificar('warning', 'Estado no encontrado', 'No se encontro el estado seleccionado.');
+            return;
+        }
+        if (Number(estado.en_uso || 0) > 0) {
+            notificar('warning', 'Estado en uso', 'No se puede editar un estado que ya esta en uso.');
+            return;
+        }
+
+        if (typeof Swal !== 'undefined' && Swal.fire) {
+            Swal.fire({
+                title: 'Editar estado',
+                html:
+                    '<input id="sw_estado_codigo" class="swal2-input" maxlength="30" placeholder="Codigo" value="' + escapeHtml(estado.codigo || '') + '">' +
+                    '<input id="sw_estado_nombre" class="swal2-input" maxlength="60" placeholder="Nombre" value="' + escapeHtml(estado.nombre || '') + '">' +
+                    '<input id="sw_estado_orden" class="swal2-input" type="number" placeholder="Orden" value="' + Number(estado.orden_visual || 0) + '">',
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: function() {
+                    return {
+                        codigo: normalizarCodigoEstado(document.getElementById('sw_estado_codigo').value),
+                        nombre: String(document.getElementById('sw_estado_nombre').value || '').trim().toUpperCase(),
+                        orden: Number(document.getElementById('sw_estado_orden').value || 0)
+                    };
+                }
+            }).then(function(result) {
+                if (!result || !result.isConfirmed || !result.value) {
+                    return;
+                }
+                var val = result.value;
+                $.ajax({
+                    url: 'guias_despachos_ajax.php',
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'editar_estado_catalogo',
+                        id: id,
+                        codigo: val.codigo,
+                        nombre: val.nombre,
+                        activo: 'S',
+                        orden_visual: val.orden
+                    },
+                    success: function(resp) {
+                        if (!resp || !resp.ok) {
+                            notificar('error', 'No se pudo editar', (resp && resp.message) ? resp.message : 'Error editando estado.');
+                            return;
+                        }
+                        cargarCatalogoEstados();
+                        notificar('success', 'Estado actualizado', 'El estado se actualizo.');
+                    },
+                    error: function() {
+                        notificar('error', 'Error', 'Error de comunicacion al editar estado.');
+                    }
+                });
+            });
+            return;
+        }
+
+        var codigoNuevo = prompt('Codigo del estado:', estado.codigo || '');
+        if (codigoNuevo === null) return;
+        var nombreNuevo = prompt('Nombre del estado:', estado.nombre || '');
+        if (nombreNuevo === null) return;
+
+        $.ajax({
+            url: 'guias_despachos_ajax.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'editar_estado_catalogo',
+                id: id,
+                codigo: normalizarCodigoEstado(codigoNuevo),
+                nombre: String(nombreNuevo || '').trim().toUpperCase(),
+                activo: 'S',
+                orden_visual: Number(estado.orden_visual || 0)
+            },
+            success: function(resp) {
+                if (!resp || !resp.ok) {
+                    notificar('error', 'No se pudo editar', (resp && resp.message) ? resp.message : 'Error editando estado.');
+                    return;
+                }
+                cargarCatalogoEstados();
+                notificar('success', 'Estado actualizado', 'El estado se actualizo.');
+            },
+            error: function() {
+                notificar('error', 'Error', 'Error de comunicacion al editar estado.');
+            }
+        });
+    }
+
+    function eliminarEstadoCatalogo(id) {
+        var estado = null;
+        for (var i = 0; i < catalogoEstados.length; i++) {
+            if (Number(catalogoEstados[i].id) === Number(id)) {
+                estado = catalogoEstados[i];
+                break;
+            }
+        }
+        if (!estado) {
+            notificar('warning', 'Estado no encontrado', 'No se encontro el estado seleccionado.');
+            return;
+        }
+        if (Number(estado.en_uso || 0) > 0) {
+            notificar('warning', 'Estado en uso', 'No se puede eliminar un estado que ya esta en uso.');
+            return;
+        }
+
+        var ejecutarBorrado = function(ok) {
+            if (!ok) return;
+            $.ajax({
+                url: 'guias_despachos_ajax.php',
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'eliminar_estado_catalogo',
+                    id: id
+                },
+                success: function(resp) {
+                    if (!resp || !resp.ok) {
+                        notificar('error', 'No se pudo eliminar', (resp && resp.message) ? resp.message : 'Error eliminando estado.');
+                        return;
+                    }
+                    cargarCatalogoEstados();
+                    notificar('success', 'Estado eliminado', 'El estado fue eliminado del catalogo.');
+                },
+                error: function() {
+                    notificar('error', 'Error', 'Error de comunicacion al eliminar estado.');
+                }
+            });
+        };
+
+        if (typeof Swal !== 'undefined' && Swal.fire) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Eliminar estado',
+                text: 'Se eliminara el estado ' + (estado.codigo || '') + '. Continuar?',
+                showCancelButton: true,
+                confirmButtonText: 'Si, eliminar',
+                cancelButtonText: 'Cancelar'
+            }).then(function(result) {
+                ejecutarBorrado(!!(result && result.isConfirmed));
+            });
+            return;
+        }
+
+        ejecutarBorrado(window.confirm('Eliminar estado ' + (estado.codigo || '') + '?'));
     }
 
     $(document).ready(function() {
@@ -1168,7 +1757,32 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             cambiarEstadoGuia();
         });
 
+        $('#btnRefrescarCatalogoEstados').on('click', function() {
+            cargarCatalogoEstados();
+        });
+
+        $('#btnAgregarEstadoCfg').on('click', function() {
+            agregarEstadoCatalogo();
+        });
+
         $('#btnBuscarCandidatasRem').on('click', function() {
+            var idGuia = $('#r_id_guia').val();
+            if (idGuia && idGuia !== '0') {
+                cargarCandidatasRemisiones(idGuia);
+            }
+        });
+
+        $('#r_prefijo').on('change', function() {
+            var idGuia = $('#r_id_guia').val();
+            if (!idGuia || idGuia === '0') {
+                return;
+            }
+            cargarZonasCandidatas(function() {
+                cargarCandidatasRemisiones(idGuia);
+            });
+        });
+
+        $('#r_zonas').on('change', function() {
             var idGuia = $('#r_id_guia').val();
             if (idGuia && idGuia !== '0') {
                 cargarCandidatasRemisiones(idGuia);
@@ -1190,7 +1804,8 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
         $(document).on('click', '.btn-remisiones', function() {
             var id = $(this).data('id');
             var num = $(this).data('num');
-            abrirModalRemisiones(id, num);
+            var estado = $(this).data('estado');
+            abrirModalRemisiones(id, num, estado);
         });
 
         $(document).on('click', '.btn-agregar-remision', function() {
@@ -1221,7 +1836,17 @@ $fechaHastaDefault = date('Y-m-d\\TH:i');
             imprimirGuia(id);
         });
 
-        cargarGuias();
+        $(document).on('click', '.btn-editar-estado-cfg', function() {
+            editarEstadoCatalogo($(this).data('id'));
+        });
+
+        $(document).on('click', '.btn-eliminar-estado-cfg', function() {
+            eliminarEstadoCatalogo($(this).data('id'));
+        });
+
+        cargarCatalogoEstados(function() {
+            cargarGuias();
+        });
     });
 })();
 </script>

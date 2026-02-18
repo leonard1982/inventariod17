@@ -6,8 +6,8 @@ if (empty($_SESSION['user'])) {
     exit;
 }
 
-if (!esUsuarioAdministradorMenu($_SESSION['user'])) {
-    echo '<div style="padding:12px; font-family:Arial;">ACCESO DENEGADO: SOLO EL ADMINISTRADOR PUEDE GESTIONAR PERMISOS DE MENU.</div>';
+if (!usuarioPuedeAdministrarPermisosMenu($_SESSION['user'])) {
+    echo '<div style="padding:12px; font-family:Arial;">ACCESO DENEGADO: NO TIENE PERMISO PARA GESTIONAR PERMISOS DE MENU.</div>';
     exit;
 }
 
@@ -149,16 +149,24 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
     <div class="perm-card">
         <header class="perm-head">
             <h2 class="perm-title"><i class="fas fa-user-shield"></i> Permisos de menu por usuario</h2>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap align-items-center">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMarcarTodos"><i class="fas fa-check-double"></i> Marcar todo</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDesmarcarTodos"><i class="fas fa-ban"></i> Desmarcar todo</button>
                 <button type="button" class="btn btn-outline-primary btn-sm" id="btnPerfilConductor"><i class="fas fa-truck-ramp-box"></i> Perfil conductor</button>
+                <div class="form-check form-switch m-0 d-flex align-items-center gap-1">
+                    <input class="form-check-input" type="checkbox" id="chkPermTodo">
+                    <label class="form-check-label small mb-0" for="chkPermTodo">Todos</label>
+                </div>
+                <div class="form-check form-switch m-0 d-flex align-items-center gap-1">
+                    <input class="form-check-input" type="checkbox" id="chkPermNinguno">
+                    <label class="form-check-label small mb-0" for="chkPermNinguno">Ninguno</label>
+                </div>
             </div>
         </header>
 
         <div class="perm-body">
             <div class="perm-nota">
-                <strong>Regla:</strong> solo el usuario administrador puede editar estos permisos. Si un usuario no tiene configuracion guardada, tendra acceso total por defecto.
+                <strong>Regla:</strong> puede editar permisos el administrador o un usuario delegado con permiso explicito en este modulo. Si un usuario no tiene configuracion guardada, tendra acceso total por defecto.
             </div>
 
             <div class="row g-2 align-items-end mb-3">
@@ -194,7 +202,7 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
                                 <label class="perm-item">
                                     <input type="checkbox" class="form-check-input perm-check" data-menu-id="<?php echo htmlspecialchars($menuId); ?>">
                                     <span><?php echo htmlspecialchars($meta['texto']); ?></span>
-                                    <?php if (!empty($meta['solo_admin'])): ?><span class="perm-badge">ADMIN</span><?php endif; ?>
+                                    <?php if (!empty($meta['solo_admin'])): ?><span class="perm-badge"><?php echo !empty($meta['delegable_admin']) ? 'ADMIN/DELEGABLE' : 'ADMIN'; ?></span><?php endif; ?>
                                 </label>
                             <?php endif; ?>
                         <?php endforeach; ?>
@@ -209,7 +217,7 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
                                 <label class="perm-item">
                                     <input type="checkbox" class="form-check-input perm-check" data-menu-id="<?php echo htmlspecialchars($menuId); ?>">
                                     <span><?php echo htmlspecialchars($meta['texto']); ?></span>
-                                    <?php if (!empty($meta['solo_admin'])): ?><span class="perm-badge">ADMIN</span><?php endif; ?>
+                                    <?php if (!empty($meta['solo_admin'])): ?><span class="perm-badge"><?php echo !empty($meta['delegable_admin']) ? 'ADMIN/DELEGABLE' : 'ADMIN'; ?></span><?php endif; ?>
                                 </label>
                             <?php endif; ?>
                         <?php endforeach; ?>
@@ -260,11 +268,15 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
 
     function marcarTodos(valor) {
         $('.perm-check').prop('checked', !!valor);
+        $('#chkPermTodo').prop('checked', !!valor);
+        $('#chkPermNinguno').prop('checked', !valor);
     }
 
     function aplicarPerfilConductor() {
         marcarTodos(false);
         $('.perm-check[data-menu-id="despachosconductor"]').prop('checked', true);
+        $('#chkPermTodo').prop('checked', false);
+        $('#chkPermNinguno').prop('checked', false);
     }
 
     function variabVendeUsuario(usuario) {
@@ -426,6 +438,8 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
             var permitido = (mapa && typeof mapa === 'object' && Object.prototype.hasOwnProperty.call(mapa, menuId)) ? mapa[menuId] : 'N';
             $(this).prop('checked', permitido === 'S');
         });
+        $('#chkPermTodo').prop('checked', false);
+        $('#chkPermNinguno').prop('checked', false);
     }
 
     function cargarPermisosUsuario() {
@@ -548,6 +562,16 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
         $('#btnMarcarTodos').on('click', function() { marcarTodos(true); });
         $('#btnDesmarcarTodos').on('click', function() { marcarTodos(false); });
         $('#btnPerfilConductor').on('click', aplicarPerfilConductor);
+        $('#chkPermTodo').on('change', function() {
+            if ($(this).is(':checked')) {
+                marcarTodos(true);
+            }
+        });
+        $('#chkPermNinguno').on('change', function() {
+            if ($(this).is(':checked')) {
+                marcarTodos(false);
+            }
+        });
         $('#btnCargarPermisos').on('click', cargarPermisosUsuario);
         $('#btnGuardarPermisos').on('click', guardarPermisosUsuario);
         $('#btnResetPermisos').on('click', restaurarDefaultUsuario);
@@ -559,6 +583,9 @@ if ($vcUsuarios = $conect_bd_actual->consulta($vsqlUsuarios)) {
             cargarPermisosUsuario();
             cargarVendeUsuario(false);
         });
+
+        $('#chkPermTodo').prop('checked', false);
+        $('#chkPermNinguno').prop('checked', false);
     });
 })();
 </script>

@@ -4,6 +4,27 @@ require('conecta.php');
 
 header('Content-Type: application/json; charset=UTF-8');
 
+function toUtf8SeguroConductor($valor) {
+    if (!is_string($valor)) {
+        return $valor;
+    }
+    if (preg_match('//u', $valor)) {
+        return $valor;
+    }
+    return utf8_encode($valor);
+}
+
+function normalizarUtf8RecursivoConductor($dato) {
+    if (is_array($dato)) {
+        $out = array();
+        foreach ($dato as $k => $v) {
+            $out[toUtf8SeguroConductor((string)$k)] = normalizarUtf8RecursivoConductor($v);
+        }
+        return $out;
+    }
+    return toUtf8SeguroConductor($dato);
+}
+
 function respConductor($ok, $payload = array()) {
     $salidaPrevia = '';
     if (ob_get_level() > 0) {
@@ -16,7 +37,8 @@ function respConductor($ok, $payload = array()) {
     }
 
     $base = array('ok' => $ok ? true : false);
-    echo json_encode(array_merge($base, $payload), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    $respuesta = normalizarUtf8RecursivoConductor(array_merge($base, $payload));
+    echo json_encode($respuesta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
 
@@ -301,13 +323,185 @@ function numeroFbConductor($valor) {
     return is_numeric($txt) ? (float)$txt : 0.0;
 }
 
+function tokenRemisionEntregaConductor($kardexId) {
+    return strtoupper(substr(sha1('D17_REMISION_' . (int)$kardexId . '_2026'), 0, 12));
+}
+
+function directorioPodConductor() {
+    return __DIR__ . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'pod';
+}
+
+function asegurarDirectorioPodConductor() {
+    $dir = directorioPodConductor();
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0775, true);
+    }
+    if (!is_dir($dir) || !is_writable($dir)) {
+        throw new Exception('No se pudo preparar carpeta POD en uploads/pod.');
+    }
+    return $dir;
+}
+
+function rutaRelativaPodConductor($nombreArchivo) {
+    return 'uploads/pod/' . $nombreArchivo;
+}
+
+function guardarFotoPodConductor($file, $idGuia, $kardexId) {
+    if (!isset($file) || !is_array($file) || !isset($file['tmp_name'])) {
+        throw new Exception('Foto POD no recibida.');
+    }
+    if ((int)$file['error'] !== UPLOAD_ERR_OK) {
+        throw new Exception('Error cargando foto POD.');
+    }
+    if (!is_uploaded_file($file['tmp_name'])) {
+        throw new Exception('Archivo de foto POD invalido.');
+    }
+
+    $dir = asegurarDirectorioPodConductor();
+    $ext = strtolower(pathinfo(isset($file['name']) ? (string)$file['name'] : '', PATHINFO_EXTENSION));
+    if (!in_array($ext, array('jpg', 'jpeg', 'png'), true)) {
+        throw new Exception('Formato de foto POD no soportado. Usa JPG o PNG.');
+    }
+
+    $nombre = 'podf_' . (int)$idGuia . '_' . (int)$kardexId . '_' . date('Ymd_His') . '_' . mt_rand(100, 999) . '.' . $ext;
+    $abs = $dir . DIRECTORY_SEPARATOR . $nombre;
+    if (!@move_uploaded_file($file['tmp_name'], $abs)) {
+        throw new Exception('No se pudo guardar foto POD.');
+    }
+
+    return rutaRelativaPodConductor($nombre);
+}
+
+function guardarFirmaPodConductor($firmaData, $idGuia, $kardexId) {
+    $txt = trim((string)$firmaData);
+    if ($txt === '') {
+        throw new Exception('Firma POD no recibida.');
+    }
+
+    if (!preg_match('/^data:image\/(png|jpeg|jpg);base64,/', $txt, $m)) {
+        throw new Exception('Formato de firma POD no valido.');
+    }
+
+    $tipo = strtolower((string)$m[1]);
+    $ext = ($tipo === 'png') ? 'png' : 'jpg';
+    $base64 = substr($txt, strpos($txt, ',') + 1);
+    $bin = base64_decode($base64, true);
+    if ($bin === false || strlen($bin) < 100) {
+        throw new Exception('Firma POD vacia o corrupta.');
+    }
+
+    $dir = asegurarDirectorioPodConductor();
+    $nombre = 'pods_' . (int)$idGuia . '_' . (int)$kardexId . '_' . date('Ymd_His') . '_' . mt_rand(100, 999) . '.' . $ext;
+    $abs = $dir . DIRECTORY_SEPARATOR . $nombre;
+    if (@file_put_contents($abs, $bin) === false) {
+        throw new Exception('No se pudo guardar firma POD.');
+    }
+
+    return rutaRelativaPodConductor($nombre);
+}
+
+function borrarArchivosPodConductor($rutasRelativas) {
+    if (!is_array($rutasRelativas)) {
+        return;
+    }
+
+    $base = realpath(__DIR__);
+    if ($base === false) {
+        return;
+    }
+    $base = rtrim($base, "\\/") . DIRECTORY_SEPARATOR;
+
+    foreach ($rutasRelativas as $rel) {
+        $r = trim((string)$rel);
+        if ($r === '') {
+            continue;
+        }
+        $abs = realpath(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $r));
+        if ($abs === false) {
+            continue;
+        }
+        if (strpos($abs, $base) !== 0) {
+            continue;
+        }
+        if (is_file($abs)) {
+            @unlink($abs);
+        }
+    }
+}
+
+function construirMensajePodConductor($meta) {
+    $ts = isset($meta['ts']) ? trim((string)$meta['ts']) : '';
+    $lat = isset($meta['lat']) ? trim((string)$meta['lat']) : '';
+    $lng = isset($meta['lng']) ? trim((string)$meta['lng']) : '';
+    $acc = isset($meta['acc']) ? trim((string)$meta['acc']) : '';
+    $foto = isset($meta['foto']) ? trim((string)$meta['foto']) : '';
+    $firma = isset($meta['firma']) ? trim((string)$meta['firma']) : '';
+    $estado = isset($meta['estado']) ? strtoupper(trim((string)$meta['estado'])) : 'ENTREGADO';
+
+    $msg = 'POD|EST=' . $estado
+        . '|TS=' . $ts
+        . '|LAT=' . $lat
+        . '|LNG=' . $lng
+        . '|ACC=' . $acc
+        . '|FOTO=' . $foto
+        . '|FIRMA=' . $firma;
+
+    if (strlen($msg) > 500) {
+        $msg = substr($msg, 0, 500);
+    }
+    return $msg;
+}
+
+function esErrorCheckEstadoLegacyConductor($e) {
+    if (!($e instanceof Exception)) {
+        return false;
+    }
+    $msg = strtoupper((string)$e->getMessage());
+    if (strpos($msg, 'CK_SN_GUIAS_ESTADO') !== false) {
+        return true;
+    }
+    if (strpos($msg, 'CK_SN_GUIAS_ESTADO_H') !== false) {
+        return true;
+    }
+    if (strpos($msg, 'CHECK_297') !== false) {
+        return true;
+    }
+    if (strpos($msg, 'VIOLATES CHECK CONSTRAINT') !== false && strpos($msg, 'SN_GUIAS') !== false) {
+        return true;
+    }
+    return false;
+}
+
+function aplicarCierreGuiaCompatibleConductor(PDO $pdo, $idGuia, $usuario) {
+    $estadosIntento = array('ENTREGADO', 'FINALIZADO');
+
+    foreach ($estadosIntento as $idx => $estadoCierre) {
+        try {
+            $stmtUpd = $pdo->prepare("UPDATE SN_GUIAS SET ESTADO_ACTUAL = ?, FECHA_EDICION = CURRENT_TIMESTAMP, USUARIO_EDITA = ? WHERE ID = ?");
+            $stmtUpd->execute(array($estadoCierre, $usuario, $idGuia));
+
+            $idEstado = nextIdConductor($pdo, 'SN_GUIAS_ESTADOS');
+            $stmtIns = $pdo->prepare("INSERT INTO SN_GUIAS_ESTADOS (ID, ID_GUIA, ESTADO, FECHA_HORA_ESTADO, USUARIO, OBSERVACION) VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?)");
+            $stmtIns->execute(array($idEstado, $idGuia, $estadoCierre, $usuario, 'CIERRE AUTOMATICO POR ENTREGA TOTAL DE REMISIONES'));
+            return $estadoCierre;
+        } catch (PDOException $e) {
+            $esUltimo = ($idx === count($estadosIntento) - 1);
+            if ($esUltimo || !esErrorCheckEstadoLegacyConductor($e)) {
+                throw $e;
+            }
+        }
+    }
+
+    return 'ENTREGADO';
+}
+
 function actualizarEstadoGuiaSiAplica(PDO $pdo, $idGuia, $usuario) {
     $sqlPend = "
         SELECT COUNT(*)
         FROM SN_GUIAS_DETALLE d
         LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID
         WHERE d.ID_GUIA = ?
-          AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') <> 'ENTREGADO'
+          AND (e.ID IS NULL OR UPPER(TRIM(COALESCE(e.ESTADO_ENTREGA, ''))) IN ('', 'PENDIENTE'))
     ";
     $stmtPend = $pdo->prepare($sqlPend);
     $stmtPend->execute(array($idGuia));
@@ -321,16 +515,11 @@ function actualizarEstadoGuiaSiAplica(PDO $pdo, $idGuia, $usuario) {
     $stmtEstado->execute(array($idGuia));
     $estadoActual = strtoupper(txtConductor($stmtEstado->fetchColumn()));
 
-    if ($estadoActual === 'FINALIZADO') {
+    if ($estadoActual === 'FINALIZADO' || $estadoActual === 'ENTREGADO') {
         return;
     }
 
-    $stmtUpd = $pdo->prepare("UPDATE SN_GUIAS SET ESTADO_ACTUAL = 'FINALIZADO', FECHA_EDICION = CURRENT_TIMESTAMP, USUARIO_EDITA = ? WHERE ID = ?");
-    $stmtUpd->execute(array($usuario, $idGuia));
-
-    $idEstado = nextIdConductor($pdo, 'SN_GUIAS_ESTADOS');
-    $stmtIns = $pdo->prepare("INSERT INTO SN_GUIAS_ESTADOS (ID, ID_GUIA, ESTADO, FECHA_HORA_ESTADO, USUARIO, OBSERVACION) VALUES (?, ?, 'FINALIZADO', CURRENT_TIMESTAMP, ?, ?)");
-    $stmtIns->execute(array($idEstado, $idGuia, $usuario, 'CIERRE AUTOMATICO POR ENTREGA TOTAL DE REMISIONES'));
+    aplicarCierreGuiaCompatibleConductor($pdo, $idGuia, $usuario);
 }
 
 try {
@@ -347,11 +536,30 @@ try {
     $ctxConductor = obtenerContextoConductorUsuario($pdo, $usuarioSesion, $esAdminSesion);
 
     if ($action === 'listar_guias') {
-        $soloPendientes = strtoupper(trim((string)(isset($_POST['solo_pendientes']) ? $_POST['solo_pendientes'] : 'S')));
-        $soloPendientes = ($soloPendientes === 'N') ? 'N' : 'S';
+        $estadoGuia = strtoupper(trim((string)(isset($_POST['estado_guia']) ? $_POST['estado_guia'] : 'PENDIENTES')));
+        if (!in_array($estadoGuia, array('PENDIENTES', 'TODAS', 'ENTREGADAS'), true)) {
+            $estadoGuia = 'PENDIENTES';
+        }
 
         $where = array();
-        $where[] = "g.ESTADO_ACTUAL <> 'FINALIZADO'";
+        if ($estadoGuia === 'PENDIENTES') {
+            $where[] = "(
+                SELECT COUNT(*)
+                FROM SN_GUIAS_DETALLE d0
+                LEFT JOIN SN_GUIAS_DETALLE_ESTADO e0 ON e0.ID_GUIA = d0.ID_GUIA AND e0.KARDEX_ID = d0.KARDEX_ID
+                WHERE d0.ID_GUIA = g.ID
+                  AND (e0.ID IS NULL OR UPPER(TRIM(COALESCE(e0.ESTADO_ENTREGA, ''))) IN ('', 'PENDIENTE'))
+            ) > 0";
+        } elseif ($estadoGuia === 'ENTREGADAS') {
+            $where[] = "(SELECT COUNT(*) FROM SN_GUIAS_DETALLE d1 WHERE d1.ID_GUIA = g.ID) > 0";
+            $where[] = "(
+                SELECT COUNT(*)
+                FROM SN_GUIAS_DETALLE d0
+                LEFT JOIN SN_GUIAS_DETALLE_ESTADO e0 ON e0.ID_GUIA = d0.ID_GUIA AND e0.KARDEX_ID = d0.KARDEX_ID
+                WHERE d0.ID_GUIA = g.ID
+                  AND (e0.ID IS NULL OR UPPER(TRIM(COALESCE(e0.ESTADO_ENTREGA, ''))) IN ('', 'PENDIENTE'))
+            ) = 0";
+        }
 
         $warning = '';
         if (!$ctxConductor['es_admin']) {
@@ -363,14 +571,8 @@ try {
             }
         }
 
-        if ($soloPendientes === 'S') {
-            $where[] = "(
-                SELECT COUNT(*)
-                FROM SN_GUIAS_DETALLE d0
-                LEFT JOIN SN_GUIAS_DETALLE_ESTADO e0 ON e0.ID_GUIA = d0.ID_GUIA AND e0.KARDEX_ID = d0.KARDEX_ID
-                WHERE d0.ID_GUIA = g.ID
-                  AND COALESCE(e0.ESTADO_ENTREGA, 'PENDIENTE') <> 'ENTREGADO'
-            ) > 0";
+        if (empty($where)) {
+            $where[] = "1 = 1";
         }
 
         $sql = "
@@ -387,7 +589,7 @@ try {
                     FROM SN_GUIAS_DETALLE d
                     LEFT JOIN SN_GUIAS_DETALLE_ESTADO e ON e.ID_GUIA = d.ID_GUIA AND e.KARDEX_ID = d.KARDEX_ID
                     WHERE d.ID_GUIA = g.ID
-                      AND COALESCE(e.ESTADO_ENTREGA, 'PENDIENTE') <> 'ENTREGADO'
+                      AND (e.ID IS NULL OR UPPER(TRIM(COALESCE(e.ESTADO_ENTREGA, ''))) IN ('', 'PENDIENTE'))
                 ) AS TOTAL_PENDIENTES
             FROM SN_GUIAS g
             LEFT JOIN TERCEROS tc ON tc.TERID = g.ID_CONDUCTOR
@@ -413,6 +615,7 @@ try {
         respConductor(true, array(
             'data' => $data,
             'warning' => $warning,
+            'estado_guia' => $estadoGuia,
             'conductor' => array(
                 'terid' => (int)$ctxConductor['terid'],
                 'origen' => $ctxConductor['origen'],
@@ -454,6 +657,14 @@ try {
                     WHERE c.ID_GUIA = d.ID_GUIA
                       AND c.KARDEX_ID = d.KARDEX_ID
                 ) AS TOTAL_CHAT
+                ,
+                (
+                    SELECT COUNT(*)
+                    FROM SN_GUIAS_DETALLE_CHAT cp
+                    WHERE cp.ID_GUIA = d.ID_GUIA
+                      AND cp.KARDEX_ID = d.KARDEX_ID
+                      AND UPPER(TRIM(COALESCE(cp.TIPO, ''))) = 'POD'
+                ) AS TOTAL_POD
             FROM SN_GUIAS_DETALLE d
             LEFT JOIN KARDEX k ON k.KARDEXID = d.KARDEX_ID
             LEFT JOIN KARDEXSELF ks ON ks.KARDEXID = d.KARDEX_ID
@@ -481,18 +692,25 @@ try {
                 'valor' => numeroFbConductor($row['VALOR_TXT']),
                 'estado_entrega' => txtConductor($row['ESTADO_ENTREGA']),
                 'observacion' => txtConductor($row['OBSERVACION']),
-                'total_chat' => (int)$row['TOTAL_CHAT']
+                'total_chat' => (int)$row['TOTAL_CHAT'],
+                'tiene_pod' => ((int)$row['TOTAL_POD']) > 0 ? 1 : 0,
+                'token_pdf' => tokenRemisionEntregaConductor((int)$row['KARDEX_ID'])
             );
         }
 
         respConductor(true, array('data' => $data));
     }
 
-    if ($action === 'marcar_entregado' || $action === 'justificar_no_entregado' || $action === 'justificar_parcial') {
+    if ($action === 'guardar_estado_entrega' || $action === 'marcar_entregado' || $action === 'justificar_no_entregado' || $action === 'justificar_parcial') {
         $idGuia = isset($_POST['id_guia']) ? (int)$_POST['id_guia'] : 0;
         $kardexId = isset($_POST['kardex_id']) ? (int)$_POST['kardex_id'] : 0;
         $obs = trim((string)(isset($_POST['observacion']) ? $_POST['observacion'] : ''));
         $usuario = strtoupper(trim((string)$_SESSION['user']));
+        $latitud = trim((string)(isset($_POST['latitud']) ? $_POST['latitud'] : ''));
+        $longitud = trim((string)(isset($_POST['longitud']) ? $_POST['longitud'] : ''));
+        $precisionGps = trim((string)(isset($_POST['precision_gps']) ? $_POST['precision_gps'] : ''));
+        $firmaData = (string)(isset($_POST['firma_data']) ? $_POST['firma_data'] : '');
+        $fotoFile = isset($_FILES['foto']) ? $_FILES['foto'] : null;
 
         if ($idGuia <= 0 || $kardexId <= 0) {
             respConductor(false, array('message' => 'Parametros invalidos.'));
@@ -505,14 +723,36 @@ try {
         }
 
         $estado = 'ENTREGADO';
-        if ($action === 'justificar_no_entregado') {
-            $estado = 'NO_ENTREGADO';
-        } elseif ($action === 'justificar_parcial') {
-            $estado = 'ENTREGA_PARCIAL';
+        if ($action === 'guardar_estado_entrega') {
+            $estado = strtoupper(trim((string)(isset($_POST['estado_entrega']) ? $_POST['estado_entrega'] : 'ENTREGADO')));
+            if (!in_array($estado, array('ENTREGADO', 'NO_ENTREGADO', 'ENTREGA_PARCIAL'), true)) {
+                respConductor(false, array('message' => 'Estado de entrega no valido.'));
+            }
+        } else {
+            if ($action === 'justificar_no_entregado') {
+                $estado = 'NO_ENTREGADO';
+            } elseif ($action === 'justificar_parcial') {
+                $estado = 'ENTREGA_PARCIAL';
+            }
         }
 
         if ($estado !== 'ENTREGADO' && $obs === '') {
             respConductor(false, array('message' => 'Debes ingresar una justificacion para este estado.'));
+        }
+
+        if ($estado === 'ENTREGADO') {
+            if ($latitud === '' || $longitud === '') {
+                respConductor(false, array('message' => 'Debes capturar geolocalizacion para ENTREGADO.'));
+            }
+            if (!is_numeric($latitud) || !is_numeric($longitud)) {
+                respConductor(false, array('message' => 'La geolocalizacion es invalida.'));
+            }
+            if (trim($firmaData) === '') {
+                respConductor(false, array('message' => 'Debes registrar la firma para ENTREGADO.'));
+            }
+            if (!$fotoFile || !isset($fotoFile['tmp_name']) || (int)$fotoFile['error'] !== UPLOAD_ERR_OK) {
+                respConductor(false, array('message' => 'Debes adjuntar foto para ENTREGADO.'));
+            }
         }
 
         if (strlen($obs) > 300) {
@@ -526,7 +766,22 @@ try {
             respConductor(false, array('message' => 'La remision no pertenece a la guia indicada.'));
         }
 
+        $podFotoRuta = '';
+        $podFirmaRuta = '';
+        $podTimestamp = date('Y-m-d H:i:s');
+        $archivosTmpPod = array();
+        $usaGpsKardex = columnaExisteConductor($pdo, 'KARDEX', 'SN_LONGITUD') && columnaExisteConductor($pdo, 'KARDEX', 'SN_LATITUD');
+        if ($estado === 'ENTREGADO' && !$usaGpsKardex) {
+            respConductor(false, array('message' => 'Faltan columnas KARDEX.SN_LONGITUD y/o KARDEX.SN_LATITUD. Ejecuta 06_alter_kardex_geo.sql.'));
+        }
+
         try {
+            if ($estado === 'ENTREGADO') {
+                $podFotoRuta = guardarFotoPodConductor($fotoFile, $idGuia, $kardexId);
+                $podFirmaRuta = guardarFirmaPodConductor($firmaData, $idGuia, $kardexId);
+                $archivosTmpPod = array($podFotoRuta, $podFirmaRuta);
+            }
+
             limpiarTxConductor($pdo);
             $pdo->beginTransaction();
 
@@ -535,12 +790,17 @@ try {
             $idExistente = $stmtEx->fetchColumn();
 
             if ($idExistente) {
-                $stmtUp = $pdo->prepare('UPDATE SN_GUIAS_DETALLE_ESTADO SET ESTADO_ENTREGA = ?, OBSERVACION = ?, FECHA_ESTADO = CURRENT_TIMESTAMP, USUARIO = ? WHERE ID = ?');
-                $stmtUp->execute(array($estado, ($obs !== '' ? $obs : null), $usuario, (int)$idExistente));
-            } else {
-                $idEstado = nextIdConductor($pdo, 'SN_GUIAS_DETALLE_ESTADO');
-                $stmtIn = $pdo->prepare('INSERT INTO SN_GUIAS_DETALLE_ESTADO (ID, ID_GUIA, KARDEX_ID, ESTADO_ENTREGA, OBSERVACION, FECHA_ESTADO, USUARIO) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)');
-                $stmtIn->execute(array($idEstado, $idGuia, $kardexId, $estado, ($obs !== '' ? $obs : null), $usuario));
+                $pdo->rollBack();
+                respConductor(false, array('message' => 'Esta remision ya tiene estado registrado y no se puede modificar.'));
+            }
+
+            $idEstado = nextIdConductor($pdo, 'SN_GUIAS_DETALLE_ESTADO');
+            $stmtIn = $pdo->prepare('INSERT INTO SN_GUIAS_DETALLE_ESTADO (ID, ID_GUIA, KARDEX_ID, ESTADO_ENTREGA, OBSERVACION, FECHA_ESTADO, USUARIO) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)');
+            $stmtIn->execute(array($idEstado, $idGuia, $kardexId, $estado, ($obs !== '' ? $obs : null), $usuario));
+
+            if ($estado === 'ENTREGADO') {
+                $stmtGps = $pdo->prepare('UPDATE KARDEX SET SN_LONGITUD = ?, SN_LATITUD = ? WHERE KARDEXID = ?');
+                $stmtGps->execute(array((float)$longitud, (float)$latitud, $kardexId));
             }
 
             if ($obs !== '') {
@@ -553,13 +813,37 @@ try {
                 $stmtChat->execute(array($idChat, $idGuia, $kardexId, $msg, $usuario, 'EVENTO'));
             }
 
+            if ($estado === 'ENTREGADO') {
+                $idPod = nextIdConductor($pdo, 'SN_GUIAS_DETALLE_CHAT');
+                $mensajePod = construirMensajePodConductor(array(
+                    'estado' => $estado,
+                    'ts' => $podTimestamp,
+                    'lat' => $latitud,
+                    'lng' => $longitud,
+                    'acc' => $precisionGps,
+                    'foto' => $podFotoRuta,
+                    'firma' => $podFirmaRuta
+                ));
+                $stmtPod = $pdo->prepare('INSERT INTO SN_GUIAS_DETALLE_CHAT (ID, ID_GUIA, KARDEX_ID, MENSAJE, FECHA_MENSAJE, USUARIO, TIPO) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)');
+                $stmtPod->execute(array($idPod, $idGuia, $kardexId, $mensajePod, $usuario, 'POD'));
+            }
+
             actualizarEstadoGuiaSiAplica($pdo, $idGuia, $usuario);
 
             $pdo->commit();
-            respConductor(true, array('message' => 'Estado de entrega actualizado.'));
+            respConductor(true, array(
+                'message' => 'Estado de entrega actualizado.',
+                'pod' => array(
+                    'tiene_pod' => ($estado === 'ENTREGADO') ? 1 : 0,
+                    'token_pdf' => tokenRemisionEntregaConductor($kardexId)
+                )
+            ));
         } catch (Exception $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
+            }
+            if (!empty($archivosTmpPod)) {
+                borrarArchivosPodConductor($archivosTmpPod);
             }
             throw $e;
         }

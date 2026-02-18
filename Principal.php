@@ -26,7 +26,10 @@ $menusPrincipalesDef = array(
     array('id' => 'log', 'icono' => 'fa-history', 'texto' => 'Log Maximos y Minimos'),
     array('id' => 'backorder', 'icono' => 'fa-table', 'texto' => 'BackOrder'),
     array('id' => 'guiasdespachos', 'icono' => 'fa-truck-fast', 'texto' => 'GUIAS (Despachos)'),
+    array('id' => 'centrokpi', 'icono' => 'fa-chart-line', 'texto' => 'Centro KPI'),
     array('id' => 'despachosconductor', 'icono' => 'fa-truck-ramp-box', 'texto' => 'Despachos conductor'),
+    array('id' => 'rutaconductor', 'icono' => 'fa-route', 'texto' => 'Ruta conductor (Mapa)'),
+    array('id' => 'retirados', 'icono' => 'fa-box-open', 'texto' => 'Retirados'),
     array('id' => 'listarotacion', 'icono' => 'fa-sync-alt', 'texto' => 'Rotacion Inventario'),
     array('id' => 'pedidosgeneradosauto', 'icono' => 'fa-table', 'texto' => 'Pedidos Generados'),
     array('id' => 'listaestados', 'icono' => 'fa-clipboard-list', 'texto' => 'Estados Pedidos'),
@@ -61,7 +64,7 @@ foreach ($menusPrincipalesDef as $menuDef) {
     <link href="css/bootstrap.min.css" rel="stylesheet">
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/sidebars.css" rel="stylesheet">
-    <link href="css/menu_profesional.css?v=20260217_05" rel="stylesheet">
+    <link href="css/menu_profesional.css?v=20260218_01" rel="stylesheet">
     <link href="css/bootstrap-clockpicker.css" rel="stylesheet">
     <link href="css/datatables.min.css" rel="stylesheet">
     <link href="css/alertify.min.css" rel="stylesheet">

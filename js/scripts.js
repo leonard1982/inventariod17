@@ -13,6 +13,67 @@ const HOME_DASHBOARD_STATE = {
     data: null,
     callbacks: []
 };
+const NAV_LOCK_STATE = {
+    enabled: false,
+    marker: 'inventario_nav_lock'
+};
+
+function iniciarBloqueoNavegacionAtras() {
+    if (NAV_LOCK_STATE.enabled) {
+        return;
+    }
+    NAV_LOCK_STATE.enabled = true;
+
+    try {
+        if (window.history && typeof window.history.pushState === 'function') {
+            var estado = { lock: NAV_LOCK_STATE.marker, ts: Date.now() };
+            window.history.replaceState(estado, document.title, window.location.href);
+            window.history.pushState(estado, document.title, window.location.href);
+        }
+    } catch (e) {
+    }
+
+    window.addEventListener('popstate', function() {
+        try {
+            if (window.history && typeof window.history.pushState === 'function') {
+                var estado = { lock: NAV_LOCK_STATE.marker, ts: Date.now() };
+                window.history.pushState(estado, document.title, window.location.href);
+            }
+        } catch (e) {
+        }
+    });
+
+    $(document).on('keydown', function(e) {
+        var key = e.key || '';
+        var keyLower = key.toLowerCase();
+        var target = e.target || null;
+        var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+        var editable = !!(
+            target &&
+            (
+                tag === 'input' ||
+                tag === 'textarea' ||
+                tag === 'select' ||
+                target.isContentEditable
+            )
+        );
+
+        if (e.altKey && (key === 'ArrowLeft' || keyLower === 'left' || e.which === 37 || e.keyCode === 37)) {
+            e.preventDefault();
+            return false;
+        }
+
+        if (!editable && (key === 'Backspace' || e.which === 8 || e.keyCode === 8)) {
+            e.preventDefault();
+            return false;
+        }
+
+        if (key === 'BrowserBack' || keyLower === 'browserback') {
+            e.preventDefault();
+            return false;
+        }
+    });
+}
 
 function agregarRecursoEnDocumento(doc, tagName, attrs, id) {
     if (!doc || !doc.head) {
@@ -451,6 +512,9 @@ function renderDashboardInicio(forzarDatos) {
         if (esEscritorio()) {
             destruirGraficoInicio('chartMovilEstados');
             destruirGraficoInicio('chartMovilGuias');
+            destruirGraficoInicio('chartGuiasDia');
+            destruirGraficoInicio('chartEstados');
+            destruirGraficoInicio('chartConductores');
 
             var pc = data.pc || {};
             var k = pc.kpis || {};
@@ -586,9 +650,22 @@ function alternarMenuUsuario(forzar) {
     }
 
     var abrir = typeof forzar === 'boolean' ? forzar : !contenedor.classList.contains('open');
-    contenedor.classList.toggle('open', abrir);
-    boton.setAttribute('aria-expanded', abrir ? 'true' : 'false');
-    desplegable.setAttribute('aria-hidden', abrir ? 'false' : 'true');
+
+    if (abrir) {
+        desplegable.removeAttribute('inert');
+        contenedor.classList.add('open');
+        boton.setAttribute('aria-expanded', 'true');
+        desplegable.setAttribute('aria-hidden', 'false');
+        return;
+    }
+
+    if (desplegable.contains(document.activeElement)) {
+        boton.focus();
+    }
+    contenedor.classList.remove('open');
+    boton.setAttribute('aria-expanded', 'false');
+    desplegable.setAttribute('aria-hidden', 'true');
+    desplegable.setAttribute('inert', '');
 }
 
 function obtenerTituloMenu(menuId) {
@@ -860,6 +937,8 @@ function registrarAccionMenu(id, url, mensaje, confirmacion) {
 }
 
 $(document).ready(function() {
+    iniciarBloqueoNavegacionAtras();
+
     if (window.innerWidth >= 1200) {
         mostrar();
     }
@@ -891,6 +970,11 @@ $(document).ready(function() {
         e.stopPropagation();
         alternarMenuUsuario();
     });
+
+    var dropdownUsuario = document.getElementById('userMenuDropdown');
+    if (dropdownUsuario && dropdownUsuario.getAttribute('aria-hidden') !== 'false') {
+        dropdownUsuario.setAttribute('inert', '');
+    }
 
     $(document).on('click', function(e) {
         var menuUsuario = document.getElementById('userMenu');
@@ -961,7 +1045,10 @@ $(document).ready(function() {
     registrarAccionMenu('listaabcventamotos', 'ListaVentaMotos.php', 'Este reporte puede tardar un poco. Desea continuar?', true);
     registrarAccionMenu('backorder', 'backorder.php', 'Este reporte puede tardar un poco. Desea continuar?', true);
     registrarAccionMenu('guiasdespachos', 'guias_despachos.php', 'Cargando', false);
+    registrarAccionMenu('centrokpi', 'centro_kpi.php', 'Cargando', false);
     registrarAccionMenu('despachosconductor', 'despachos_conductor.php', 'Cargando', false);
+    registrarAccionMenu('rutaconductor', 'ruta_conductor_mapa.php', 'Cargando', false);
+    registrarAccionMenu('retirados', 'retirados.php', 'Cargando', false);
     registrarAccionMenu('pedidosgeneradosauto', 'PedidosGeneradosAutomaticamente.php', 'Este reporte puede tardar un poco. Desea continuar?', true);
     registrarAccionMenu('recalcularnumericas', 'recalcularnumericas.php', 'Este reporte puede tardar un poco. Desea continuar?', true);
     registrarAccionMenu('listaconfiguracionlineas', 'ListaConfiguracionLineas.php', 'Este reporte puede tardar un poco. Desea continuar?', true);
